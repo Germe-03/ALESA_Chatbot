@@ -1,0 +1,48 @@
+Regel 1 – Grundsätzliche Anwendung:
+Wenn der Kunde eine Nut, einen Schlitz oder eine Trennnut herstellen möchte,
+dann prüfe den Werkstoff und die Maschinenleistung, um den passenden Schneidstoff (HSS oder Hartmetall) zu wählen.
+
+Regel 2 – Verwendung von NUTEX HSS:
+Verwende NUTEX HSS-Werkzeuge,
+wenn eine der folgenden Bedingungen zutrifft:
+
+Das Werkstück besteht aus weicherem Material (z. B. Baustahl, Aluminium, Messing oder Kunststoff).
+
+Die Maschine hat begrenzte Leistung oder ist konventionell (keine CNC-Hochgeschwindigkeitsmaschine).
+
+Die Schnittgeschwindigkeit ist niedrig bis mittel.
+
+Der Kunde legt Wert auf Wirtschaftlichkeit und günstige Werkzeugkosten.
+
+Begründung:
+HSS-Werkzeuge sind zäh, bruchsicher und besonders geeignet für Maschinen mit geringerer Stabilität oder Leistung.
+Sie verzeihen Vibrationen und Schnittunterbrechungen besser als Hartmetall.
+NUTEX HSS wird empfohlen, wenn das Ziel ein gleichmäßiger Schnitt bei moderater Belastung ist.
+
+Regel 3 – Verwendung von NUTEX Hartmetall:
+Verwende NUTEX Hartmetall-Werkzeuge,
+wenn eine der folgenden Bedingungen zutrifft:
+
+Das Werkstück besteht aus harten oder abrasiven Materialien (z. B. Edelstahl, gehärteter Stahl, Titan oder Faserverbundstoffe).
+
+Die Maschine ist leistungsstark und vibrationsarm (z. B. CNC-Maschine).
+
+Es wird eine hohe Schnittgeschwindigkeit oder lange Standzeit verlangt.
+
+Der Kunde fordert hohe Maßgenauigkeit und beste Oberflächenqualität.
+
+Begründung:
+Hartmetall bietet eine deutlich höhere Verschleißfestigkeit und Temperaturbeständigkeit.
+Es ermöglicht hohe Schnittwerte und konstante Maßhaltigkeit über viele Bauteile hinweg.
+NUTEX Hartmetall ist ideal für präzise Serienfertigung und moderne Bearbeitungszentren.
+
+Regel 4 – Wirtschaftlichkeitsentscheidung:
+Wenn die Bearbeitung gelegentlich oder in kleinen Serien erfolgt,
+dann wähle NUTEX HSS wegen der geringeren Anschaffungskosten.
+Wenn die Bearbeitung häufig oder in Großserien erfolgt,
+dann wähle NUTEX Hartmetall, um Standzeiten und Bearbeitungskosten zu optimieren.
+
+Regel 5 – Kühlung und Bearbeitungsbedingungen:
+Wenn ohne Kühlung gearbeitet wird oder die Temperatur an der Schneide stark ansteigt,
+dann bevorzuge Hartmetall, da es hitzebeständiger ist.
+Wenn ausreichend Kühlschmierstoff vorhanden ist, kann auch HSS verwendet werden.
