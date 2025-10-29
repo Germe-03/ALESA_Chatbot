@@ -55,20 +55,34 @@ class ChromaStore:
         # Determine which IDs already exist
         ids: List[str] = [_id_for(c.path, c.page, c.text) for c in chunks]
 
-        # Chroma doesn't expose bulk membership; we read existing ids in pages
-        # Workaround: fetch count and chunk over input ids to check presence
         existing: set[str] = set()
+        # Query existing ids in chunks to avoid re-encoding unchanged entries
         for i in range(0, len(ids), 1000):
             sub = ids[i:i + 1000]
-            # query where filter by ids isn't supported for read; try get with where on path signature
-            # We'll accept re-upsert safety: upserting existing IDs is idempotent.
-            existing |= set()  # placeholder to keep logic simple
+            try:
+                res = self._col.get(ids=sub)
+                present = res.get("ids", []) if isinstance(res, dict) else []
+                if isinstance(present, list):
+                    # some clients return flat list, some nested
+                    if present and isinstance(present[0], list):
+                        for lst in present:
+                            existing.update(lst)
+                    else:
+                        existing.update(present)
+            except Exception:
+                # if get-by-ids not supported, fall back to re-upserting all
+                existing = set()
+                break
 
         texts: List[str] = []
         metas: List[Dict[str, Any]] = []
         new_ids: List[str] = []
 
+        skipped = 0
         for idv, c in zip(ids, chunks):
+            if idv in existing:
+                skipped += 1
+                continue
             new_ids.append(idv)
             texts.append(c.text)
             metas.append({
@@ -86,7 +100,7 @@ class ChromaStore:
             self._col.upsert(ids=ib, documents=tb, metadatas=mb, embeddings=vecs)
             added += len(tb)
 
-        return (added, 0)
+        return (added, skipped)
 
     def query(self, question: str, top_k: int = 6) -> List[Hit]:
         q_vec = self._encoder.encode([question])[0]
@@ -99,4 +113,3 @@ class ChromaStore:
             page = int(md.get("page", 0)) or None
             hits.append(Hit(path=p, page=page, snippet=(txt or "").strip()))
         return hits
-
