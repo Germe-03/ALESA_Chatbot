@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
 import re
+from src.alesa_bot.core.validators import is_valid_article_code
 
 # ==== Trigger-Phrasen (Intent von außen) ====
 BESTELL_TRIGGER = (
@@ -289,7 +290,12 @@ class OrderFlow:
         if field_name == "artikelnummer":
             if not user_value.strip():
                 return "Artikelnummer ist erforderlich."
-            it.artikelnummer = user_value.strip()
+            val = user_value.strip()
+            if not is_valid_article_code(val):
+                return (
+                    "Ungueltige Artikelnummer. Erlaubte Muster: 6042.0206, 6042-0206, 6042_0206, 60420206"
+                )
+            it.artikelnummer = val
             return self._ask_next_item_slot()
 
         # Menge (Pflicht)

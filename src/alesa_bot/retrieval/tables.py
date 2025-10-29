@@ -9,7 +9,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from .indexer import FileIndexer
 
 
-ARTICLE_RX = re.compile(r"\b(\d{4})[\.\-]?(\d{4})\b")  # 6042.0206 or 60420206
+ARTICLE_RX = re.compile(r"\b(\d{4})[\._\-]?(\d{4})\b")  # 6042.0206 / 6042-0206 / 6042_0206 / 60420206
 
 
 def normalize_article(s: str) -> str:
@@ -188,4 +188,3 @@ def _extract_rows_from_page(text: str) -> List[ProductRow]:
             aufnahme=fields.get("aufnahme", ""),
         ))
     return rows
-

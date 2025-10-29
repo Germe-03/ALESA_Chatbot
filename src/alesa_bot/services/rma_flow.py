@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional, Callable, Dict, Any
 import re
+from src.alesa_bot.core.validators import is_valid_article_code
 
 
 REKLAMATION_TRIGGER = (
@@ -174,6 +175,10 @@ class RMAFlow:
         if self.state.ask_field == "artikelnummer":
             if not value:
                 return "Artikelnummer ist erforderlich."
+            if not is_valid_article_code(value):
+                return (
+                    "Ungueltige Artikelnummer. Erlaubte Muster: 6042.0206, 6042-0206, 6042_0206, 60420206"
+                )
             it.artikelnummer = value
             self.state.ask_field = "menge"
             return "Menge? (Pflicht)"
@@ -268,4 +273,3 @@ class RMAFlow:
             },
             "preferred_action": s.preferred_action or "repair",
         }
-

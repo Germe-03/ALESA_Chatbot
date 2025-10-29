@@ -9,7 +9,7 @@ from src.alesa_bot.core.types import Hit
 from .indexer import FileIndexer
 
 
-ARTICLE_RX = re.compile(r"\b\d{4}(?:[\.\-]?\d{4})\b")  # 6042.0206 / 6042-0206 / 60420206
+ARTICLE_RX = re.compile(r"\b\d{4}(?:[\._\-]?\d{4})\b")  # 6042.0206 / 6042-0206 / 6042_0206 / 60420206
 
 
 class BoostedRetriever:
