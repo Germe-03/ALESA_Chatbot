@@ -30,6 +30,9 @@ from src.alesa_bot.retrieval.tables import ProductTableStore
 from src.alesa_bot.llm.vertex import VertexLLM
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.services.order_flow import OrderFlow
+from src.alesa_bot.services.order_repo import OrderRepo
+from src.alesa_bot.services.rma_flow import RMAFlow
+from src.alesa_bot.services.rma_repo import RMARepo
 
 # Intent-/Gate-Logik
 from src.alesa_bot.assistant.preorder_gate import PreOrderGate
@@ -114,6 +117,9 @@ def _build_dependencies():
 
     # 5) Order & Gate
     order_flow = OrderFlow()
+    orders_repo = OrderRepo(root=cfg.paths.data_root / "orders")
+    rma_flow = RMAFlow()
+    rma_repo = RMARepo(root=cfg.paths.data_root / "orders")
     pre_gate = PreOrderGate()
 
     # 6) UI-Port (CLI)
@@ -124,6 +130,9 @@ def _build_dependencies():
         qa_service=qa_service,
         order_flow=order_flow,
         pre_order_gate=pre_gate,
+        orders_repo=orders_repo,
+        rma_flow=rma_flow,
+        rma_repo=rma_repo,
         system_banner=(
             "===" + " ALESA Chatbot ".center(50, "=") + "===\n"
             "👋 Hallo! Ich bin ALESA, dein virtueller KI-Assistent.\n"

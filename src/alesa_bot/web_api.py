@@ -1,10 +1,11 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
+import uuid
 
 from src.alesa_bot.settings import load_config
 from src.alesa_bot.retrieval.indexer import FileIndexer
@@ -14,6 +15,12 @@ from src.alesa_bot.retrieval.vectorstore import ChromaStore, VSConfig
 from src.alesa_bot.retrieval.boosted import BoostedRetriever
 from src.alesa_bot.llm.vertex import VertexLLM
 from src.alesa_bot.services.qa_service import QAService
+from src.alesa_bot.services.order_repo import OrderRepo, OrderRecord
+from src.alesa_bot.runtime.controller import AppController
+from src.alesa_bot.assistant.preorder_gate import PreOrderGate
+from src.alesa_bot.services.order_flow import OrderFlow
+from src.alesa_bot.services.rma_flow import RMAFlow
+from src.alesa_bot.services.rma_repo import RMARepo
 from src.alesa_bot.retrieval.tables import ProductTableStore
 
 # ------------------------------------------------------------
@@ -106,6 +113,40 @@ qa = QAService(
 )
 
 # ------------------------------------------------------------
+# Orders repo
+# ------------------------------------------------------------
+orders_repo = OrderRepo(root=cfg.paths.data_root / "orders")
+rm_repo = RMARepo(root=cfg.paths.data_root / "orders")
+
+# ------------------------------------------------------------
+# Session controllers for full dialog (incl. orders)
+# ------------------------------------------------------------
+SESSIONS: dict[str, AppController] = {}
+
+def _new_controller() -> AppController:
+    return AppController(
+        qa_service=QAService(
+            retriever=retriever,
+            llm=llm,
+            system_prompt=cfg.system_prompt,
+            query_expand=True,
+            product_store=prod_store,
+        ),
+        order_flow=OrderFlow(),
+        pre_order_gate=PreOrderGate(),
+        orders_repo=orders_repo,
+        rma_flow=RMAFlow(),
+        rma_repo=rm_repo,
+    )
+
+def _get_controller(sid: str) -> AppController:
+    c = SESSIONS.get(sid)
+    if c is None:
+        c = _new_controller()
+        SESSIONS[sid] = c
+    return c
+
+# ------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------
 @app.get("/health")
@@ -137,3 +178,49 @@ def home():
     if index_file.exists():
         return FileResponse(str(index_file))
     return {"detail": "Not Found", "hint": "Leg public/index.html an oder nutze /ask direkt per API."}
+
+
+# ------------------------------------------------------------
+# Employee Portal (Admin)
+# ------------------------------------------------------------
+@app.get("/admin")
+def admin_home():
+    admin_index = PUBLIC_DIR / "admin" / "index.html"
+    if admin_index.exists():
+        return FileResponse(str(admin_index))
+    return {"detail": "Not Found", "hint": "Leg public/admin/index.html an."}
+
+
+@app.get("/admin/orders")
+def list_orders():
+    return {"orders": orders_repo.list(limit=500)}
+
+
+@app.post("/admin/order")
+def add_order(payload: dict = Body(...)):
+    try:
+        rec = OrderRecord(
+            id=orders_repo.new_id(),
+            created_at=orders_repo.now_iso(),
+            customer=payload.get("customer", {}),
+            items=payload.get("items", []),
+            comment=payload.get("comment"),
+        )
+        orders_repo.add(rec)
+        return {"ok": True, "id": rec.id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid order payload: {e}")
+
+
+# ------------------------------------------------------------
+# Chat endpoint with session state (Controller orchestration)
+# ------------------------------------------------------------
+@app.post("/chat")
+def chat(session: str = Form(None), message: str = Form(...)):
+    sid = session or uuid.uuid4().hex
+    ctrl = _get_controller(sid)
+    try:
+        replies = ctrl.handle(message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat error: {e}")
+    return {"session": sid, "responses": replies or []}

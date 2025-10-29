@@ -15,6 +15,10 @@ from typing import List
 from src.alesa_bot.services.order_flow import OrderFlow
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.assistant.preorder_gate import PreOrderGate
+from src.alesa_bot.services.order_repo import OrderRepo, OrderRecord
+from src.alesa_bot.services.rma_flow import RMAFlow
+from src.alesa_bot.services.rma_repo import RMARepo, RMARecord
+from datetime import datetime
 
 
 class AppController:
@@ -24,11 +28,23 @@ class AppController:
         order_flow: OrderFlow,
         pre_order_gate: PreOrderGate,
         system_banner: str = "",
+        orders_repo: OrderRepo | None = None,
+        rma_flow: RMAFlow | None = None,
+        rma_repo: RMARepo | None = None,
     ) -> None:
         self.qa_service = qa_service
         self.order_flow = order_flow
         self.pre_gate = pre_order_gate
         self.system_banner = system_banner
+        self.orders_repo = orders_repo
+        self.rma_flow = rma_flow or RMAFlow()
+        self.rma_repo = rma_repo
+        # bind persistence callback
+        try:
+            self.rma_flow._on_submit = self.persist_rma  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        self._await_order_confirm = False
 
     # ----------------------------------------------------
     # Öffentliche Schnittstelle (vom Runner genutzt)
@@ -46,12 +62,52 @@ class AppController:
         responses: List[str] = []
 
         q = (user_text or "").strip()
+        low = q.lower()
+
+        # E-1) Wenn exakt "bestellen" eingegeben wird: Bestellvorgang starten
+        if not self.order_flow.is_active() and low == "bestellen":
+            responses.append(self.order_flow.start())
+            return responses
+
+        # E0) Await order confirmation after product answer
+        if getattr(self, "_await_order_confirm", False) and not self.order_flow.is_active():
+            if low in {"ja", "j", "yes", "y", "bestellen"}:
+                self._await_order_confirm = False
+                responses.append(self.order_flow.start())
+                return responses
+            if low in {"nein", "n", "no"}:
+                self._await_order_confirm = False
+                responses.append("Alles klar. Sag Bescheid, wenn du bestellen moechtest.")
+                return responses
+            responses.append("Bitte antworte mit **ja** (bestellen) oder **nein**.")
+            return responses
 
         # ------------------------
-        # A) Aktiver Bestell-Flow
+        # A) Aktiver Bestell- oder RMA-Flow
         # ------------------------
         if self.order_flow.is_active():
+            prev_phase = self.order_flow.state.phase
             reply = self.order_flow.handle(q)
+            # Persist order when confirming from 'confirm' to 'idle' with a positive answer
+            try:
+                if self.orders_repo is not None and prev_phase == "confirm" and (q or "").strip().lower().startswith("ja") and not self.order_flow.is_active():
+                    payload = self._order_payload()
+                    if payload:
+                        rec = OrderRecord(
+                            id=self.orders_repo.new_id(),
+                            created_at=self.orders_repo.now_iso(),
+                            customer=payload["customer"],
+                            items=payload["items"],
+                            comment=payload.get("comment"),
+                        )
+                        self.orders_repo.add(rec)
+            except Exception:
+                pass
+            responses.append(reply)
+            return responses
+
+        if self.rma_flow.is_active():
+            reply = self.rma_flow.handle(q)
             responses.append(reply)
             return responses
 
@@ -76,10 +132,36 @@ class AppController:
         # ------------------------
         # C) Gate bei Kaufintention
         # ------------------------
-        if not self.pre_gate.suppress_next_gate and self.pre_gate.should_prompt_gate(q):
+        # C) Gate nur, wenn nicht lediglich das Wort 'bestellen' im Satz vorkommt
+        if ("bestellen" not in low) and (not self.pre_gate.suppress_next_gate) and self.pre_gate.should_prompt_gate(q):
             prompt = self.pre_gate.start(q)
             responses.append(prompt)
             return responses
+
+        # C2) Reklamation: bei exakt 'reklamation' oder 'retoure' etc. starten
+        if not self.rma_flow.is_active():
+            simple_triggers = {"reklamation", "retoure", "umtausch", "garantie"}
+            if low in simple_triggers:
+                responses.append(self.rma_flow.start())
+                return responses
+
+        # C3) RMA-Statusabfrage: 'status <RMA-ID>' oder 'rma <id>'
+        if self.rma_repo is not None:
+            parts = low.split()
+            if parts and parts[0] in {"status", "rma"} and len(parts) > 1:
+                rid = user_text.split(maxsplit=1)[1].strip()
+                rec = self.rma_repo.get(rid)
+                if rec:
+                    sla = self.rma_repo.sla_info(rec)
+                    responses.append(
+                        f"Status {rec['id']}: {rec.get('status','-')}\n"
+                        f"Erstellt: {rec.get('created_at','-')} | Aktualisiert: {rec.get('updated_at','-')}\n"
+                        f"SLA: ack bis {sla['ack_due']} ({'ueberfaellig' if sla['ack_overdue'] else 'in Frist'}), "
+                        f"loesen bis {sla['resolve_due']} ({'ueberfaellig' if sla['resolve_overdue'] else 'in Frist'})"
+                    )
+                else:
+                    responses.append("Keine Reklamation mit dieser ID gefunden.")
+                return responses
 
         # Einmalige Gate-Unterdrückung zurücksetzen
         if self.pre_gate.suppress_next_gate:
@@ -105,4 +187,34 @@ class AppController:
         responses.append(answer)
         if cites:
             responses.append("Quellen:\n" + "\n".join(cites))
+        # Mark that we await order confirmation if the last QA was a product hit
+        try:
+            if getattr(self.qa_service, "last_product", None) is not None and not self.order_flow.is_active():
+                self._await_order_confirm = True
+        except Exception:
+            pass
         return responses
+
+    # -------------- helpers --------------
+    def _order_payload(self):
+        try:
+            cs = self.order_flow.state.customer
+            items = [
+                {"artikelnummer": it.artikelnummer, "menge": it.menge}
+                for it in self.order_flow.state.items if it.is_complete()
+            ]
+            return {
+                "customer": {
+                    "kundennummer": cs.kundennummer,
+                    "typ": cs.typ,
+                    "name": cs.name,
+                    "strasse_nr": cs.strasse_nr,
+                    "plz_ort": cs.plz_ort,
+                    "bearbeiter": cs.bearbeiter,
+                    "email": cs.email,
+                },
+                "items": items,
+                "comment": self.order_flow.state.kommentar,
+            }
+        except Exception:
+            return None

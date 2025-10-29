@@ -1,4 +1,4 @@
-const API_URL = '/ask';
+const API_URL = '/chat';
 
 const el = (sel, root=document) => root.querySelector(sel);
 const els = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -29,9 +29,16 @@ function escapeHtml(s){
    .replaceAll('>','&gt;');
 }
 
+function getSession(){
+  let sid = localStorage.getItem('alesa_sid');
+  if (!sid){ sid = (self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)); localStorage.setItem('alesa_sid', sid); }
+  return sid;
+}
+
 async function ask(question){
   const form = new FormData();
-  form.append('question', question);
+  form.append('session', getSession());
+  form.append('message', question);
   const res = await fetch(API_URL, {method:'POST', body: form});
   if (!res.ok){
     const t = await res.text().catch(()=> '');
@@ -69,9 +76,11 @@ function init(){
     ta.value='';
     setBusy(true);
     scrollToBottom();
-    ask(q).then(({answer, sources})=>{
-      const bot = createMsg({role:'bot', text: answer || 'Keine Antwort erhalten.', sources: sources||[]});
-      chat.appendChild(bot);
+    ask(q).then(({responses})=>{
+      const out = responses && responses.length ? responses : ['(keine Antwort)'];
+      for (const r of out){
+        chat.appendChild(createMsg({role:'bot', text: String(r)}));
+      }
       scrollToBottom();
     }).catch(err=>{
       const bot = createMsg({role:'bot', text: `Fehler: ${err.message}`});
@@ -89,4 +98,3 @@ function init(){
 }
 
 window.addEventListener('DOMContentLoaded', init);
-
