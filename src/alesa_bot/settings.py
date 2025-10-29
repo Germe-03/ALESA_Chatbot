@@ -18,8 +18,8 @@ class VertexConfig:
 
 @dataclass(frozen=True)
 class RetrievalConfig:
-    max_mb: int = 15
-    max_pdf_pages: int = 15
+    max_mb: int = 50
+    max_pdf_pages: int = 200
     time_limit_sec: int = 4
 
 @dataclass(frozen=True)

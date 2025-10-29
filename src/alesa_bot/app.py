@@ -25,6 +25,8 @@ from src.alesa_bot.retrieval.indexer import FileIndexer
 from src.alesa_bot.retrieval.embeddings import EmbeddingEncoder
 from src.alesa_bot.retrieval.hybrid import HybridRetriever
 from src.alesa_bot.retrieval.vectorstore import ChromaStore, VSConfig
+from src.alesa_bot.retrieval.boosted import BoostedRetriever
+from src.alesa_bot.retrieval.tables import ProductTableStore
 from src.alesa_bot.llm.vertex import VertexLLM
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.services.order_flow import OrderFlow
@@ -52,6 +54,20 @@ def _build_dependencies():
     )
     indexer.build()
 
+    # 1b) Strukturierte Produkttabellen laden (CSV + heuristische PDF-Zeilen)
+    prod_store = ProductTableStore()
+    try:
+        csv_dir1 = cfg.paths.data_root / "products"
+        csv_dir2 = cfg.paths.data_processed / "products"
+        csv_files = []
+        for d in [csv_dir1, csv_dir2]:
+            if d.exists():
+                csv_files.extend([p for p in d.rglob("*.csv")])
+        prod_store.ingest_csv(csv_files)
+        prod_store.ingest_from_indexer(indexer)
+    except Exception:
+        pass
+
     # 2) Retriever (Embeddings + Hybrid Ranking)
     encoder = EmbeddingEncoder(
         project=cfg.vertex.project,
@@ -64,18 +80,20 @@ def _build_dependencies():
             encoder=encoder,
         )
         added, _ = store.build(indexer, size=800, overlap=200)
-        retriever = type("_VSAdapter", (), {
+        base = type("_VSAdapter", (), {
             "search": lambda self, q, top_k=6: store.query(q, top_k=top_k)
         })()
+        retriever = BoostedRetriever(indexer=indexer, base=base, time_limit_sec=cfg.retrieval.time_limit_sec)
     except Exception:
         # Fallback to in-memory hybrid retriever if chroma not available
-        retriever = HybridRetriever(
+        base = HybridRetriever(
             indexer=indexer,
             encoder=encoder,
             time_limit_sec=cfg.retrieval.time_limit_sec,
             chunk_size=800,
             overlap=200,
         )
+        retriever = BoostedRetriever(indexer=indexer, base=base, time_limit_sec=cfg.retrieval.time_limit_sec)
 
     # 3) LLM
     llm = VertexLLM(
@@ -91,6 +109,7 @@ def _build_dependencies():
         llm=llm,
         system_prompt=cfg.system_prompt,
         query_expand=True,
+        product_store=prod_store,
     )
 
     # 5) Order & Gate
