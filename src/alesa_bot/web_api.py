@@ -7,21 +7,9 @@ from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 import uuid
 
-from src.alesa_bot.settings import load_config
-from src.alesa_bot.retrieval.indexer import FileIndexer
-from src.alesa_bot.retrieval.embeddings import EmbeddingEncoder
-from src.alesa_bot.retrieval.hybrid import HybridRetriever
-from src.alesa_bot.retrieval.vectorstore import ChromaStore, VSConfig
-from src.alesa_bot.retrieval.boosted import BoostedRetriever
-from src.alesa_bot.llm.vertex import VertexLLM
+from src.alesa_bot.runtime.factory import build_core, new_controller
 from src.alesa_bot.services.qa_service import QAService
-from src.alesa_bot.services.order_repo import OrderRepo, OrderRecord
 from src.alesa_bot.runtime.controller import AppController
-from src.alesa_bot.assistant.preorder_gate import PreOrderGate
-from src.alesa_bot.services.order_flow import OrderFlow
-from src.alesa_bot.services.rma_flow import RMAFlow
-from src.alesa_bot.services.rma_repo import RMARepo
-from src.alesa_bot.retrieval.tables import ProductTableStore
 
 # ------------------------------------------------------------
 # App & CORS Setup
@@ -46,77 +34,14 @@ if PUBLIC_DIR.exists():
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-# ------------------------------------------------------------
-# Initialisierung von Config, Indexer, Retriever, LLM und QA-Service
-# ------------------------------------------------------------
-cfg = load_config()
-
-indexer = FileIndexer(
-    roots=[cfg.paths.data_processed_raw, cfg.paths.data_processed, cfg.paths.data_root],
-    max_mb=cfg.retrieval.max_mb,
-    max_pdf_pages=cfg.retrieval.max_pdf_pages,
-)
-indexer.build()
-
-# Strukturierte Produkttabellen indexieren (CSV + heuristische PDF-Zeilen)
-prod_store = ProductTableStore()
-try:
-    csv_dir1 = cfg.paths.data_root / "products"
-    csv_dir2 = cfg.paths.data_processed / "products"
-    csv_files = []
-    for d in [csv_dir1, csv_dir2]:
-        if d.exists():
-            csv_files.extend([p for p in d.rglob("*.csv")])
-    prod_store.ingest_csv(csv_files)
-    prod_store.ingest_from_indexer(indexer)
-except Exception:
-    pass
-
-encoder = EmbeddingEncoder(
-    project=cfg.vertex.project,
-    location=cfg.vertex.embed_location,  # z. B. us-central1 (Embeddings)
-)
-
-try:
-    store = ChromaStore(
-        cfg=VSConfig(root=cfg.paths.data_root / "vectorstore"),
-        encoder=encoder,
-    )
-    store.build(indexer, size=800, overlap=200)
-    class _VSAdapter:
-        def search(self, query: str, top_k: int = 6):
-            return store.query(query, top_k=top_k)
-    retriever = BoostedRetriever(indexer=indexer, base=_VSAdapter(), time_limit_sec=cfg.retrieval.time_limit_sec)
-except Exception:
-    # Fallback to hybrid in-memory if chroma is unavailable
-    retriever = BoostedRetriever(indexer=indexer, base=HybridRetriever(
-        indexer=indexer,
-        encoder=encoder,
-        time_limit_sec=cfg.retrieval.time_limit_sec,
-        chunk_size=800,
-        overlap=200,
-    ), time_limit_sec=cfg.retrieval.time_limit_sec)
-
-llm = VertexLLM(
-    project=cfg.vertex.project,
-    location=cfg.vertex.location,        # z. B. europe-west6 (Generative)
-    model_name=cfg.vertex.model,
-    creds_path=cfg.vertex.creds_path,    # nur genutzt, wenn gesetzt
-)
-
+core = build_core()
 qa = QAService(
-    retriever=retriever,
-    llm=llm,
-    system_prompt=cfg.system_prompt,
+    retriever=core.retriever,
+    llm=core.llm,
+    system_prompt=core.cfg.system_prompt,
     query_expand=True,
-    product_store=prod_store,
+    product_store=core.prod_store,
 )
-
-# ------------------------------------------------------------
-# Orders repo
-# ------------------------------------------------------------
-orders_repo = OrderRepo(root=cfg.paths.data_root / "orders")
-rm_repo = RMARepo(root=cfg.paths.data_root / "orders")
 
 # ------------------------------------------------------------
 # Session controllers for full dialog (incl. orders)
@@ -124,20 +49,7 @@ rm_repo = RMARepo(root=cfg.paths.data_root / "orders")
 SESSIONS: dict[str, AppController] = {}
 
 def _new_controller() -> AppController:
-    return AppController(
-        qa_service=QAService(
-            retriever=retriever,
-            llm=llm,
-            system_prompt=cfg.system_prompt,
-            query_expand=True,
-            product_store=prod_store,
-        ),
-        order_flow=OrderFlow(),
-        pre_order_gate=PreOrderGate(),
-        orders_repo=orders_repo,
-        rma_flow=RMAFlow(),
-        rma_repo=rm_repo,
-    )
+    return new_controller(core)
 
 def _get_controller(sid: str) -> AppController:
     c = SESSIONS.get(sid)
@@ -177,7 +89,7 @@ def home():
     index_file = PUBLIC_DIR / "index.html"
     if index_file.exists():
         return FileResponse(str(index_file))
-    return {"detail": "Not Found", "hint": "Leg public/index.html an oder nutze /ask direkt per API."}
+    return {"detail": "Not Found", "hint": "Leg public/index.html an oder nutze /chat per API."}
 
 
 # ------------------------------------------------------------

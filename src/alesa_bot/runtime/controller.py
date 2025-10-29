@@ -15,9 +15,11 @@ from typing import List
 from src.alesa_bot.services.order_flow import OrderFlow
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.assistant.preorder_gate import PreOrderGate
-from src.alesa_bot.services.order_repo import OrderRepo, OrderRecord
+from src.alesa_bot.services.order_repo import OrderRepo
+from src.alesa_bot.services.order_service import OrderService
 from src.alesa_bot.services.rma_flow import RMAFlow
-from src.alesa_bot.services.rma_repo import RMARepo, RMARecord
+from src.alesa_bot.services.rma_repo import RMARepo
+from src.alesa_bot.services.rma_service import RMAService
 from datetime import datetime
 
 
@@ -29,16 +31,20 @@ class AppController:
         pre_order_gate: PreOrderGate,
         system_banner: str = "",
         orders_repo: OrderRepo | None = None,
+        order_service: OrderService | None = None,
         rma_flow: RMAFlow | None = None,
         rma_repo: RMARepo | None = None,
+        rma_service: RMAService | None = None,
     ) -> None:
         self.qa_service = qa_service
         self.order_flow = order_flow
         self.pre_gate = pre_order_gate
         self.system_banner = system_banner
         self.orders_repo = orders_repo
+        self.order_service = order_service
         self.rma_flow = rma_flow or RMAFlow()
         self.rma_repo = rma_repo
+        self.rma_service = rma_service
         # bind persistence callback
         try:
             self.rma_flow._on_submit = self.persist_rma  # type: ignore[attr-defined]
@@ -92,15 +98,8 @@ class AppController:
             try:
                 if self.orders_repo is not None and prev_phase == "confirm" and (q or "").strip().lower().startswith("ja") and not self.order_flow.is_active():
                     payload = self._order_payload()
-                    if payload:
-                        rec = OrderRecord(
-                            id=self.orders_repo.new_id(),
-                            created_at=self.orders_repo.now_iso(),
-                            customer=payload["customer"],
-                            items=payload["items"],
-                            comment=payload.get("comment"),
-                        )
-                        self.orders_repo.add(rec)
+                    if payload and self.order_service is not None:
+                        self.order_service.persist_and_notify(payload)
             except Exception:
                 pass
             responses.append(reply)
@@ -216,5 +215,14 @@ class AppController:
                 "items": items,
                 "comment": self.order_flow.state.kommentar,
             }
+        except Exception:
+            return None
+
+    # -------------- RMA helpers --------------
+    def persist_rma(self, payload: dict) -> str | None:
+        try:
+            if self.rma_service is None:
+                return None
+            return self.rma_service.persist_and_notify(payload)  # type: ignore[return-value]
         except Exception:
             return None
