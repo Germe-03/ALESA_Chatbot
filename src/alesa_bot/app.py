@@ -24,6 +24,7 @@ from src.alesa_bot.settings import load_config
 from src.alesa_bot.retrieval.indexer import FileIndexer
 from src.alesa_bot.retrieval.embeddings import EmbeddingEncoder
 from src.alesa_bot.retrieval.hybrid import HybridRetriever
+from src.alesa_bot.retrieval.vectorstore import ChromaStore, VSConfig
 from src.alesa_bot.llm.vertex import VertexLLM
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.services.order_flow import OrderFlow
@@ -56,13 +57,25 @@ def _build_dependencies():
         project=cfg.vertex.project,
         location=cfg.vertex.embed_location
     )
-    retriever = HybridRetriever(
-        indexer=indexer,
-        encoder=encoder,
-        time_limit_sec=cfg.retrieval.time_limit_sec,
-        chunk_size=800,
-        overlap=200,
-    )
+    # 2b) Vectorstore (Chroma) as primary retriever
+    try:
+        store = ChromaStore(
+            cfg=VSConfig(root=cfg.paths.data_root / "vectorstore"),
+            encoder=encoder,
+        )
+        added, _ = store.build(indexer, size=800, overlap=200)
+        retriever = type("_VSAdapter", (), {
+            "search": lambda self, q, top_k=6: store.query(q, top_k=top_k)
+        })()
+    except Exception:
+        # Fallback to in-memory hybrid retriever if chroma not available
+        retriever = HybridRetriever(
+            indexer=indexer,
+            encoder=encoder,
+            time_limit_sec=cfg.retrieval.time_limit_sec,
+            chunk_size=800,
+            overlap=200,
+        )
 
     # 3) LLM
     llm = VertexLLM(

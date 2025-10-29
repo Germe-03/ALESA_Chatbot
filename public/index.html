@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ALESA Chatbot</title>
+    <meta name="color-scheme" content="light" />
+    <link rel="preload" href="/assets/style.css" as="style">
+    <link rel="stylesheet" href="/assets/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="container">
+          <div class="brand">
+            <div class="logo" aria-hidden="true"></div>
+            <div>
+              <div class="title">ALESA Chatbot</div>
+              <div class="subtitle">Blau‑Weiß, schnell und fokussiert auf Antworten mit Quellen</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="container chat" id="chat">
+          <div id="empty" class="empty">
+            <div class="hero"></div>
+            <h2>Willkommen!</h2>
+            <p>Stelle deine Frage – ich finde passende Stellen in den ALESA‑Dokumenten.</p>
+          </div>
+        </section>
+      </main>
+
+      <div class="composer">
+        <div class="inner">
+          <div class="inputbar">
+            <textarea id="q" placeholder="Schreibe hier deine Frage … (Enter zum Senden, Shift+Enter für Zeilenumbruch)"></textarea>
+            <button id="send" class="btn" title="Senden">Senden</button>
+          </div>
+          <div class="hint">Hinweis: Der Bot antwortet nur auf Basis der verfügbaren Dokumente und zeigt Quellen an.</div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/assets/app.js" defer></script>
+  </body>
+ </html>
