@@ -18,6 +18,19 @@ ALESA ist ein produktionsnaher RAG‑Chatbot auf Basis von Google Vertex AI (Ge
   - Service Usage Consumer
   - optional: Storage Object Viewer
 
+### E‑Mail (optional, für Bestätigungen)
+
+Setze SMTP‑Umgebungsvariablen, damit der Bot Bestätigungen verschicken kann. Ohne Konfiguration werden E‑Mails in `data/outbox/` als `.eml` abgelegt (Testmodus).
+
+```
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=user@example.com
+SMTP_PASSWORD=geheim
+SMTP_SECURITY=starttls   # starttls|ssl|none
+MAIL_FROM=alesa-bot@example.com
+```
+
 ### .env Variablen
 
 ```
@@ -50,6 +63,7 @@ uvicorn src.alesa_bot.web_api:app --host 127.0.0.1 --port 8080
 ```
 
 Öffne anschließend `http://127.0.0.1:8080/`.
+Öffne anschliessend `http://127.0.0.1:8080/admin`
 
 CLI‑Variante (optional):
 
