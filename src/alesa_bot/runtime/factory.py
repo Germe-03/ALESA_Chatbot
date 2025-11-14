@@ -48,12 +48,24 @@ def _build_index_and_tables(cfg) -> tuple[FileIndexer, ProductTableStore]:
     try:
         csv_dir1 = cfg.paths.data_root / "products"
         csv_dir2 = cfg.paths.data_processed / "products"
+        csv_dir3 = cfg.paths.data_root / "raw"
         csv_files = []
-        for d in [csv_dir1, csv_dir2]:
+        for d in [csv_dir1, csv_dir2, csv_dir3]:
             if d.exists():
                 csv_files.extend([p for p in d.rglob("*.csv")])
         prod_store.ingest_csv(csv_files)
+        # Erst strukturierte PDF‑Tabellen (genauer), dann Text‑Heuristik als Fallback
+        pdfs: list[Path] = []
+        for root in [cfg.paths.data_processed_raw, cfg.paths.data_processed, cfg.paths.data_root]:
+            if root and Path(root).exists():
+                pdfs.extend([p for p in Path(root).rglob("*.pdf")])
+        prod_store.ingest_from_pdf_files(pdfs)
         prod_store.ingest_from_indexer(indexer)
+    except Exception:
+        pass
+    # Optional: kurzer Hinweis zur Transparenz
+    try:
+        print(f"[Produktindex] Zeilen geladen: {prod_store.count()}")
     except Exception:
         pass
     return indexer, prod_store

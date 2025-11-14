@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .indexer import FileIndexer
+try:
+    # optional pdf table extraction
+    from .pdf_tables import extract_rows_from_pdf  # type: ignore
+except Exception:
+    def extract_rows_from_pdf(path: Path):  # type: ignore
+        return []
 
 
 ARTICLE_RX = re.compile(r"\b(\d{4})[\._\-]?(\d{4})\b")  # 6042.0206 / 6042-0206 / 6042_0206 / 60420206
@@ -21,15 +27,39 @@ def normalize_article(s: str) -> str:
     return (m.group(1) + m.group(2)).strip()
 
 
+def _nz_numeric(s: str) -> str:
+    """Return 'NULL' (SQL-style) when a numeric cell is empty.
+
+    Used for numeric-like fields: d1, b, b2, nuttiefe, d2, d3, aufnahme.
+    """
+    if s is None:
+        return "NULL"
+    s2 = s.strip()
+    return s2 if s2 else "NULL"
+
+
 HEADER_SYNONYMS: Dict[str, List[str]] = {
-    "d1": ["d1", "D1"],
-    "b": ["b", "B"],
-    "b2": ["b2", "B2"],
-    "nuttiefe": ["nuttiefe", "nutttiefe", "nut-tiefe", "nut tiefe"],
+    # Außendurchmesser
+    "d1": [
+        "d1", "d 1", "d-1", "D1", "ø d1", "ø d 1", "ø d-1", "ø d", "ød",
+        "durchmesser", "aussendurchmesser", "außendurchmesser", "außen-ø", "aussen-ø", "außen ø",
+        "ø", "diameter", "D"
+    ],
+    # Schnitt-/Körperbreite
+    "b": ["b", "B", "schnittbreite", "schnitt-dicke", "schnittdicke", "kerf", "breite"],
+    "b2": ["b2", "B2", "körperdicke", "koerperdicke", "blattdicke", "koerper", "körper"],
+    # Nuten
+    "nuttiefe": ["nuttiefe", "nut-tiefe", "nut tiefe", "nutttiefe", "nutteife", "nuttiefe t", "t", "t1", "h"],
+    # Zusatzdurchmesser
     "d2": ["d2", "D2"],
     "d3": ["d3", "D3"],
-    "zahnform": ["zahnform", "zahn-form"],
-    "aufnahme": ["aufnahme", "aufnahme-ø", "aufnahme ø", "aufnahme d"],
+    # Zähne
+    "zahnform": ["zahnform", "zahn-form", "form", "zähneform"],
+    # Aufnahme/Bohrung
+    "aufnahme": [
+        "aufnahme", "aufnahme-ø", "aufnahme ø", "aufnahme d", "bohrung", "bohr-ø", "bohrung d",
+        "bohrungsdurchmesser", "innen-ø", "innen ø", "bohr Ø"
+    ],
 }
 
 
@@ -63,31 +93,105 @@ class ProductTableStore:
 
     # --------- Building ---------
     def ingest_csv(self, files: Iterable[Path]) -> int:
+        """Ingest CSVs with robust delimiter and header normalization.
+
+        - Detects delimiter (comma vs semicolon)
+        - Normalizes headers like "ArtikelNr.", "d1 mm", "b1 mm", "Aufnahmen" to
+          canonical keys: artikel, d1, b, b2, nuttiefe, d2, d3, zahnform, aufnahme
+        - Ignores unknown columns
+        """
+        def guess_delim(sample: str) -> str:
+            sc, cc = sample.count(";"), sample.count(",")
+            # Prefer semicolon if clearly more ; than , in the header line
+            if sc > cc:
+                return ";"
+            return ","
+
+        def canonize_header(h: str) -> str:
+            if not h:
+                return ""
+            s = h.strip().lower()
+            # remove units and punctuation/spaces/umlauts variants
+            s = s.replace(" mm", "").replace(" (mm)", "")
+            s = s.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+            s = s.replace("/", " ").replace("-", " ")
+            s = s.replace(".", "").replace(":", "").replace("\t", " ")
+            s = " ".join(s.split())
+            # simple mappings
+            if s in ("artikelnr", "artikel nr", "artikelnummer", "artikel", "code"):
+                return "artikel"
+            if s in ("d1", "d 1", "d-1", "durchmesser", "aussendurchmesser", "aussen d", "d"):
+                return "d1"
+            if s in ("b", "schnittbreite", "schnitt dicke", "schnittdicke", "breite", "kerf"):
+                return "b"
+            if s in ("b1", "b2", "blattdicke", "koerper", "koerperdicke", "koerper dicke"):
+                return "b2"
+            if s in ("nuttiefe", "nut tiefe", "t", "t1", "h"):
+                return "nuttiefe"
+            if s in ("d2",):
+                return "d2"
+            if s in ("d3",):
+                return "d3"
+            if s in ("zahnform", "form"):
+                return "zahnform"
+            if s in ("aufnahme", "bohrung", "bohr d", "bohrungsdurchmesser", "innen d", "aufnahmen"):
+                return "aufnahme"
+            return ""
+
         count = 0
         for f in files:
             try:
                 with f.open("r", encoding="utf-8", errors="ignore") as fp:
-                    rd = csv.DictReader(fp)
-                    for r in rd:
-                        code_raw = (r.get("artikel") or r.get("Artikel") or r.get("code") or r.get("Code") or "").strip()
+                    # Read header line to determine delimiter and canonical field names
+                    first = fp.readline()
+                    if not first:
+                        continue
+                    delim = guess_delim(first)
+                    headers_raw = [h.strip() for h in first.strip().split(delim)]
+                    headers = [canonize_header(h) for h in headers_raw]
+                    # Build index map for needed fields
+                    idx: Dict[str, int] = {}
+                    for i, h in enumerate(headers):
+                        if h and h not in idx:
+                            idx[h] = i
+                    # iterate remaining lines
+                    for line in fp:
+                        if not line or not line.strip() or set(line.strip()) == set(";,"):
+                            continue
+                        parts = [p.strip() for p in line.rstrip("\n\r").split(delim)]
+                        # pad parts to length of header for safe indexing
+                        if len(parts) < len(headers):
+                            parts += [""] * (len(headers) - len(parts))
+                        # fetch fields
+                        def getv(key: str) -> str:
+                            j = idx.get(key)
+                            return parts[j].strip() if j is not None else ""
+
+                        code_raw = getv("artikel")
+                        if not code_raw:
+                            # try loose: find any token in the row that looks like an article number
+                            merged = " ".join(parts)
+                            m = ARTICLE_RX.search(merged)
+                            code_raw = m.group(0) if m else ""
                         if not code_raw:
                             continue
                         code_norm = normalize_article(code_raw)
                         pr = ProductRow(
                             code_raw=code_raw,
                             code_norm=code_norm,
-                            d1=(r.get("d1") or r.get("D1") or "").strip(),
-                            b=(r.get("b") or r.get("B") or "").strip(),
-                            b2=(r.get("b2") or r.get("B2") or "").strip(),
-                            nuttiefe=(r.get("nuttiefe") or r.get("Nuttiefe") or "").strip(),
-                            d2=(r.get("d2") or r.get("D2") or "").strip(),
-                            d3=(r.get("d3") or r.get("D3") or "").strip(),
-                            zahnform=(r.get("zahnform") or r.get("Zahnform") or "").strip(),
-                            aufnahme=(r.get("aufnahme") or r.get("Aufnahme") or "").strip(),
+                            d1=_nz_numeric(getv("d1")),
+                            b=_nz_numeric(getv("b")),
+                            b2=_nz_numeric(getv("b2")),
+                            nuttiefe=_nz_numeric(getv("nuttiefe")),
+                            d2=_nz_numeric(getv("d2")),
+                            d3=_nz_numeric(getv("d3")),
+                            zahnform=getv("zahnform"),
+                            aufnahme=_nz_numeric(getv("aufnahme")),
                         )
                         self._upsert(pr)
                         count += 1
             except Exception:
+                # ignore file-level errors to keep startup resilient
                 continue
         return count
 
@@ -108,6 +212,24 @@ class ProductTableStore:
                     total += 1
         return total
 
+    def count(self) -> int:
+        return len(self.by_code)
+
+    def ingest_from_pdf_files(self, files: Iterable[Path]) -> int:
+        """Extrahiert Tabellen strukturiert mit pdfplumber (sofern installiert)."""
+        total = 0
+        for f in files:
+            if f.suffix.lower() != ".pdf":
+                continue
+            try:
+                rows = extract_rows_from_pdf(f)
+            except Exception:
+                rows = []
+            for r in rows:
+                self._upsert(r)
+                total += 1
+        return total
+
     def _upsert(self, row: ProductRow) -> None:
         if not row.code_norm:
             return
@@ -117,7 +239,17 @@ class ProductTableStore:
             return
         # prefer row with more populated fields
         def _filled(x: ProductRow) -> int:
-            return sum(1 for v in [x.d1, x.b, x.b2, x.nuttiefe, x.d2, x.d3, x.zahnform, x.aufnahme] if v)
+            def _is_val(v: str) -> bool:
+                if not v:
+                    return False
+                vs = v.strip()
+                if not vs:
+                    return False
+                # Treat SQL-style NULL as empty
+                if vs.upper() == "NULL":
+                    return False
+                return True
+            return sum(1 for v in [x.d1, x.b, x.b2, x.nuttiefe, x.d2, x.d3, x.zahnform, x.aufnahme] if _is_val(v))
         if _filled(row) > _filled(prev):
             self.by_code[row.code_norm] = row
 
@@ -178,13 +310,13 @@ def _extract_rows_from_page(text: str) -> List[ProductRow]:
         rows.append(ProductRow(
             code_raw=code_raw,
             code_norm=code_norm,
-            d1=fields.get("d1", ""),
-            b=fields.get("b", ""),
-            b2=fields.get("b2", ""),
-            nuttiefe=fields.get("nuttiefe", ""),
-            d2=fields.get("d2", ""),
-            d3=fields.get("d3", ""),
+            d1=_nz_numeric(fields.get("d1", "")),
+            b=_nz_numeric(fields.get("b", "")),
+            b2=_nz_numeric(fields.get("b2", "")),
+            nuttiefe=_nz_numeric(fields.get("nuttiefe", "")),
+            d2=_nz_numeric(fields.get("d2", "")),
+            d3=_nz_numeric(fields.get("d3", "")),
             zahnform=fields.get("zahnform", ""),
-            aufnahme=fields.get("aufnahme", ""),
+            aufnahme=_nz_numeric(fields.get("aufnahme", "")),
         ))
     return rows
