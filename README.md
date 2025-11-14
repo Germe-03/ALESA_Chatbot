@@ -84,6 +84,7 @@ docker run -p 8080:8080 --env-file .env -v C:\\pfad\\zu\\creds.json:/app/creds.j
 
 - Fragestellungen zu Produkten/Dokumenten stellen (RAG). Quellen werden angezeigt.
 - Produktmaße zu Artikelnummern (z. B. `6042.0206`) werden als Tabelle ausgegeben.
+  Dies funktioniert nicht für alle Artikel lediglich für eine Geringe Auswahl von dem Nutex Katalog S10-2-22
 - Nach einer Produktantwort fragt der Bot automatisch: „Moechten Sie dieses Produkt bestellen?“
   - „ja“ oder exakt „bestellen“ startet den Bestell‑Assistenten.
   - Exakt „bestellen“ startet jederzeit direkt den Bestell‑Flow. „bestellen“ in einem Satz löst nichts aus.
