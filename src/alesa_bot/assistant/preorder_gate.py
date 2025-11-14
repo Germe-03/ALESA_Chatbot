@@ -95,8 +95,8 @@ class PreOrderGate:
         self.product_hint = self._extract_product_hint(user_text)
         prod = f" **{self.product_hint}**" if self.product_hint else ""
         return (
-            f"Möchtest du{prod} **direkt bestellen** oder zuerst eine **Beratung/Produktempfehlung**?\n"
-            "Bitte antworte mit **bestellen** oder **beratung**."
+            f"Möchten Sie{prod} **direkt bestellen** oder zuerst eine **Beratung/Produktempfehlung**?\n"
+            "Bitte antworten Sie mit **bestellen** oder **beratung**."
         )
 
     def active(self) -> bool:

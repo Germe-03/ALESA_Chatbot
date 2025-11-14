@@ -80,6 +80,11 @@ def load_config() -> Config:
 
     retrieval = RetrievalConfig()
     system_prompt = os.environ.get(
-        "SYSTEM_PROMPT", "Du bist ALESA, ein hilfreicher und freundlicher KI-Assistent."
+        "SYSTEM_PROMPT",
+        (
+            "Sie sind ALESA, ein hilfreicher und freundlicher KI-Assistent. "
+            "Sprechen Sie Nutzerinnen und Nutzer stets höflich mit 'Sie' an. "
+            "Antworten Sie präzise und quellengebunden."
+        ),
     )
     return Config(vertex=vertex, retrieval=retrieval, paths=paths, system_prompt=system_prompt)

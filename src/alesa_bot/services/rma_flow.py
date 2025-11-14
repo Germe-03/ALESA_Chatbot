@@ -75,7 +75,7 @@ class RMAFlow:
         self.state.ask_field = "email"
         return (
             "Alles klar – ich eröffne eine Reklamation (RMA).\n"
-            "Bitte zuerst deine E‑Mail (Pflicht)."
+            "Bitte zuerst Ihre E‑Mail (Pflicht)."
         )
 
     def handle(self, user_text: str) -> str:
@@ -116,12 +116,12 @@ class RMAFlow:
                 except Exception:
                     pass
                 self.state.phase = "idle"
-                return "Danke – deine Reklamation wurde erfasst. Du erhältst eine Bestätigung per E‑Mail."
+                return "Danke – Ihre Reklamation wurde erfasst. Sie erhalten eine Bestätigung per E‑Mail."
             if low in {"nein", "n", "no"}:
                 self.state.phase = "items"
                 if self.state.current_idx < 0 or self._current_item().is_complete():
                     self._add_new_item()
-                return "Kein Problem. Was möchtest du ändern?"
+                return "Kein Problem. Was möchten Sie ändern?"
             return "Bitte bestätige mit **ja** oder **nein**."
 
         return "Unbekannter Zustand. Schreibe 'reklamation', um neu zu starten."

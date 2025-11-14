@@ -108,8 +108,8 @@ class OrderFlow:
                                 ask_field=None, kommentar=None, summary_cache="")
         # Erste Frage: Kundennummer (wahlpflicht, Enter überspringt)
         self.state.ask_field = "kundennummer"
-        return ("Alles klar – ich starte den Bestell-Assistenten.\n"
-                "Zuerst benötige ich deine Kundendaten.\n\n"
+        return ("Alles klar – ich starte den Bestell‑Assistenten.\n"
+                "Zuerst benötige ich Ihre Kundendaten.\n\n"
                 "Kundennummer? (optional – mit Enter überspringen)")
 
     def handle(self, user_text: str) -> str:
@@ -118,7 +118,7 @@ class OrderFlow:
         low = t.strip().lower()
 
         if self.state.phase == "idle":
-            return "Wenn du eine Bestellung starten möchtest, schreibe z. B.: „Ich würde gerne bestellen.“"
+            return "Wenn Sie eine Bestellung starten möchten, schreiben Sie z. B.: „Ich würde gerne bestellen.“"
 
         if self.state.phase == "customer":
             return self._handle_customer_phase(t)
@@ -275,7 +275,7 @@ class OrderFlow:
             self.state.ask_field = "menge"
             return "Menge? (Pflicht)"
         self.state.ask_field = None
-        return ("Dieser Artikel ist vollständig. Du kannst **'neuer artikel'** sagen "
+        return ("Dieser Artikel ist vollständig. Sie können **'neuer artikel'** schreiben "
                 "oder **'fertig'**, um fortzufahren.")
 
     def _fill_item_slot_and_ask_next(self, user_value: str) -> str:
@@ -306,7 +306,7 @@ class OrderFlow:
             return self._ask_next_item_slot()
 
         # Kein Slot offen → Hinweis
-        return ("Wenn du einen weiteren Artikel anlegen willst, schreibe **'neuer artikel'**. "
+        return ("Wenn Sie einen weiteren Artikel anlegen möchten, schreiben Sie **'neuer artikel'**. "
                 "Oder **'fertig'** zum Abschluss der Artikelerfassung.")
 
     # --- Summary ---

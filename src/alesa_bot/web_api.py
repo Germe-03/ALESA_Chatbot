@@ -8,6 +8,7 @@ from starlette.staticfiles import StaticFiles
 import uuid
 
 from src.alesa_bot.runtime.factory import build_core, new_controller
+from src.alesa_bot.services.order_repo import OrderRecord
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.runtime.controller import AppController
 
@@ -105,20 +106,20 @@ def admin_home():
 
 @app.get("/admin/orders")
 def list_orders():
-    return {"orders": orders_repo.list(limit=500)}
+    return {"orders": core.orders_repo.list(limit=500)}
 
 
 @app.post("/admin/order")
 def add_order(payload: dict = Body(...)):
     try:
         rec = OrderRecord(
-            id=orders_repo.new_id(),
-            created_at=orders_repo.now_iso(),
+            id=core.orders_repo.new_id(),
+            created_at=core.orders_repo.now_iso(),
             customer=payload.get("customer", {}),
             items=payload.get("items", []),
             comment=payload.get("comment"),
         )
-        orders_repo.add(rec)
+        core.orders_repo.add(rec)
         return {"ok": True, "id": rec.id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid order payload: {e}")

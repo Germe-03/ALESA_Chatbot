@@ -143,10 +143,10 @@ def new_controller(core: CoreContext) -> AppController:
 def banner_text() -> str:
     return (
         "===" + " ALESA Chatbot ".center(50, "=") + "===\n"
-        "👋 Hallo! Ich bin ALESA, dein virtueller KI-Assistent.\n"
-        "Ich unterstütze dich bei allgemeinen Fragen, bei Produktempfehlungen\n"
-        "und — wenn du möchtest — auch direkt beim Bestellen.\n"
-        "Sag einfach z. B. ‘Ich würde gerne bestellen’, um den Bestell-Assistenten zu starten.\n\n"
-        "Tippe deine Nachricht und drücke [Enter].\n"
-        "Mit 'exit', 'quit' oder 'stop' beendest du den Chat.\n"
+        "👋 Guten Tag! Ich bin ALESA, Ihr virtueller KI‑Assistent.\n"
+        "Ich unterstütze Sie bei allgemeinen Fragen und Produktempfehlungen\n"
+        "und — wenn Sie möchten — auch direkt beim Bestellen.\n"
+        "Schreiben Sie z. B. ‘Ich würde gerne bestellen’, um den Bestell‑Assistenten zu starten.\n\n"
+        "Tippen Sie Ihre Nachricht und drücken Sie [Enter].\n"
+        "Mit 'exit', 'quit' oder 'stop' beenden Sie den Chat.\n"
     )

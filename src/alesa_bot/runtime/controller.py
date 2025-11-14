@@ -83,9 +83,9 @@ class AppController:
                 return responses
             if low in {"nein", "n", "no"}:
                 self._await_order_confirm = False
-                responses.append("Alles klar. Sag Bescheid, wenn du bestellen moechtest.")
+                responses.append("Alles klar. Sagen Sie Bescheid, wenn Sie bestellen möchten.")
                 return responses
-            responses.append("Bitte antworte mit **ja** (bestellen) oder **nein**.")
+            responses.append("Bitte antworten Sie mit **ja** (bestellen) oder **nein**.")
             return responses
 
         # ------------------------
@@ -125,7 +125,7 @@ class AppController:
                 # kein return → weiter unten QA
                 q = cached
             elif action == "repeat":
-                responses.append("Bitte antworte mit **bestellen** oder **beratung**.")
+                responses.append("Bitte antworten Sie mit **bestellen** oder **beratung**.")
                 return responses
 
         # ------------------------
