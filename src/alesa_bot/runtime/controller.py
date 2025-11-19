@@ -77,16 +77,14 @@ class AppController:
 
         # E0) Await order confirmation after product answer
         if getattr(self, "_await_order_confirm", False) and not self.order_flow.is_active():
+            # Nur bei explizitem Zustimmen in den Bestell-Flow springen; sonst normal weitermachen
             if low in {"ja", "j", "yes", "y", "bestellen"}:
                 self._await_order_confirm = False
                 responses.append(self.order_flow.start())
                 return responses
-            if low in {"nein", "n", "no"}:
-                self._await_order_confirm = False
-                responses.append("Alles klar. Sagen Sie Bescheid, wenn Sie bestellen möchten.")
-                return responses
-            responses.append("Bitte antworten Sie mit **ja** (bestellen) oder **nein**.")
-            return responses
+            # Jede andere Eingabe beendet die Wartehaltung und lässt den normalen Dialog weiterlaufen
+            self._await_order_confirm = False
+            # kein return -> geht unten mit QA/Flows weiter
 
         # ------------------------
         # A) Aktiver Bestell- oder RMA-Flow
