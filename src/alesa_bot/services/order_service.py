@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from src.alesa_bot.services.order_repo import OrderRepo, OrderRecord
-from src.alesa_bot.services.emailer import send_mail
+from src.alesa_bot.services.emailer import send_order_confirmation
+from src.alesa_bot.services.order_repo import OrderRecord, OrderRepo
 
 
 class OrderService:
-    """Handles persistence + customer email for orders.
-
-    Expects payload as produced by OrderFlow in AppController._order_payload().
-    """
+    """Handles persistence + customer email for orders."""
 
     def __init__(self, repo: OrderRepo) -> None:
         self.repo = repo
@@ -28,15 +25,16 @@ class OrderService:
 
             # Best effort: send confirmation email
             to = (payload.get("customer", {}).get("email") or "").strip()
+            customer_name = payload.get("customer", {}).get("name", "")
             if to:
-                lines = ["Bestellbestaetigung", "", f"Bestell-ID: {rec.id}"]
-                for it in payload.get("items", []):
-                    lines.append(f"- {it.get('artikelnummer','?')} x {it.get('menge','?')}")
-                if payload.get("comment"):
-                    lines += ["", f"Kommentar: {payload['comment']}"]
-                send_mail(to=to, subject="Ihre ALESA Bestellbestaetigung", text="\n".join(lines))
+                send_order_confirmation(
+                    to=to,
+                    order_id=rec.id,
+                    items=payload.get("items", []),
+                    customer_name=customer_name,
+                    comment=payload.get("comment"),
+                )
 
             return rec.id
         except Exception:
             return None
-

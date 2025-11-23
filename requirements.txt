@@ -18,4 +18,6 @@ python-multipart
 chromadb>=0.5
 pdfplumber>=0.10
 
+langdetect>=1.0.9
+
 

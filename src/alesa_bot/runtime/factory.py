@@ -20,6 +20,7 @@ from src.alesa_bot.services.order_service import OrderService
 from src.alesa_bot.services.rma_service import RMAService
 from src.alesa_bot.assistant.preorder_gate import PreOrderGate
 from src.alesa_bot.runtime.controller import AppController
+from src.alesa_bot.services.language import LanguageHelper
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class CoreContext:
     encoder: EmbeddingEncoder
     retriever: any
     llm: VertexLLM
+    lang_helper: LanguageHelper | None
     prod_store: ProductTableStore
     orders_repo: OrderRepo
     rma_repo: RMARepo
@@ -112,11 +114,12 @@ def build_core() -> CoreContext:
     indexer, prod_store = _build_index_and_tables(cfg)
     encoder, retriever = _build_retriever(cfg, indexer)
     llm = _build_llm(cfg)
+    lang_helper = LanguageHelper(llm)
     orders_repo = OrderRepo(root=cfg.paths.data_root / "orders")
     rma_repo = RMARepo(root=cfg.paths.data_root / "orders")
     order_service = OrderService(orders_repo)
     rma_service = RMAService(rma_repo)
-    return CoreContext(cfg, indexer, encoder, retriever, llm, prod_store, orders_repo, rma_repo, order_service, rma_service)
+    return CoreContext(cfg, indexer, encoder, retriever, llm, lang_helper, prod_store, orders_repo, rma_repo, order_service, rma_service)
 
 
 def new_controller(core: CoreContext) -> AppController:
@@ -125,6 +128,7 @@ def new_controller(core: CoreContext) -> AppController:
         llm=core.llm,
         system_prompt=core.cfg.system_prompt,
         query_expand=True,
+        lang_helper=core.lang_helper,
         product_store=core.prod_store,
     )
     return AppController(

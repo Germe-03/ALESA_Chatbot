@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ALESA Mitarbeiterportal – Bestellungen</title>
+    <link rel="stylesheet" href="/assets/style.css" />
+    <style>
+      .table{width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden}
+      th,td{padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top}
+      th{background:var(--primary-050); color:var(--primary-600)}
+      tr:hover td{background:#fafcff}
+      .pill{display:inline-block; padding:2px 8px; border-radius:999px; background:var(--primary-050); color:var(--primary-600); margin-right:6px}
+      .small{color:var(--muted); font-size:.85rem}
+      .wrap{white-space:pre-wrap}
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="container">
+          <div class="brand">
+            <div class="logo" aria-hidden="true"></div>
+            <div>
+              <div class="title">Mitarbeiterportal</div>
+              <div class="subtitle">Bestellungen aus dem Chatbot</div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main class="container" style="padding:20px 16px 120px">
+        <h2>Bestellungen</h2>
+        <div id="meta" class="small"></div>
+        <div style="overflow:auto">
+          <table class="table" id="tbl">
+            <thead>
+              <tr>
+                <th>ID/Zeit</th>
+                <th>Kunde</th>
+                <th>Positionen</th>
+                <th>Kommentar</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      async function loadOrders(){
+        const r = await fetch('/admin/orders');
+        const j = await r.json();
+        const rows = j.orders || [];
+        document.getElementById('meta').textContent = `${rows.length} Bestellung(en)`;
+        const tb = document.querySelector('#tbl tbody');
+        tb.innerHTML = '';
+        for (const o of rows){
+          const tr = document.createElement('tr');
+          const cust = o.customer || {}; const items = o.items||[];
+          const cell = (html)=>{ const td=document.createElement('td'); td.innerHTML=html; return td };
+          tr.appendChild(cell(`<div><strong>${o.id}</strong></div><div class="small">${o.created_at||''}</div>`));
+          tr.appendChild(cell(`${cust.kundennummer?`Kundennr.: ${cust.kundennummer}<br>`:''}${cust.typ||''} ${cust.name||''}<br>${cust.strasse_nr||''}<br>${cust.plz_ort||''}<br>${cust.email||''}`));
+          tr.appendChild(cell(items.map((it,i)=>`<span class="pill">${i+1}</span> ${it.artikelnummer||'-'} × ${it.menge||'-'}`).join('<br>')));
+          tr.appendChild(cell(`<div class="wrap">${o.comment||''}</div>`));
+          tb.appendChild(tr);
+        }
+      }
+      loadOrders().catch(console.error);
+      setInterval(loadOrders, 5000);
+    </script>
+  </body>
+ </html>

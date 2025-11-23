@@ -2,19 +2,27 @@
 from __future__ import annotations
 from typing import List
 
-def build_prompt(system_prompt: str, snippets: List[str], question: str) -> str:
+
+def build_prompt(system_prompt: str, snippets: List[str], question: str, user_lang: str = "de") -> str:
     ctx = "\n\n---\n\n".join(snippets)
+    lang_hint = "Alle Quelldokumente sind deutsch. Formuliere die Fachantwort auf Deutsch, sachlich und praezise."
+    if user_lang and user_lang != "de":
+        lang_hint += (
+            f" Die Nutzerfrage war in Sprache '{user_lang}'. "
+            "Auch dann im Deutschen bleiben, damit die Fakten exakt den Quellen folgen."
+        )
     guidance = (
         f"{system_prompt}\n"
+        f"{lang_hint}\n"
         "ANTWORT-RICHTLINIEN:\n"
-        "1) Antworte NUR auf Basis der Auszüge.\n"
+        "1) Antworte NUR auf Basis der Auszuege.\n"
         "2) Decke ALLE gefragten Punkte ab. Wenn ein Punkt nicht belegt ist,\n"
         "   markiere ihn exakt mit: [Keine Quelle in den Dateien gefunden].\n"
         "3) Gib die Antwort als nummerierte Liste aus (1., 2., 3., ...)."
     )
     return (
         f"{guidance}\n\n"
-        f"AUSZÜGE BEGINN\n{ctx}\nAUSZÜGE ENDE\n\n"
+        f"AUSZUEGE BEGINN\n{ctx}\nAUSZUEGE ENDE\n\n"
         f"FRAGE: {question}\n"
         f"ANTWORT:"
     )

@@ -1,0 +1,13 @@
+﻿Artikel Nr.,Beschichtung,d1 mm,b mm,b1 mm,Nuttiefe mm,d2 mm,d3 mm,Schicht,Werkstoff,Aufnahme 6058. _ _ _ _
+63530629,unbeschichtet,63,2,2.73,14.5,16,32,-,-,".0440, .0540, .0640"
+63540629,AlCrN-beschichtet,63,2,2.73,14.5,16,32,AlCrN,universal,".0440, .0540, .0640"
+63540644,DLC-H-beschichtet,63,2,2.73,14.5,16,32,DLC-H,Aluminium,".0440, .0540, .0640"
+63530661,unbeschichtet,80,2.5,2.73,23.5,16,32,-,-,".0440, .0540, .0640"
+63540661,AlCrN-beschichtet,80,2.5,2.73,23.5,16,32,AlCrN,universal,".0440, .0540, .0640"
+63540676,DLC-H-beschichtet,80,2.5,2.73,23.5,16,32,DLC-H,Aluminium,".0440, .0540, .0640"
+63530723,unbeschichtet,100,3,3.08,29.5,22,40,-,-,.0650
+63540723,AlCrN-beschichtet,100,3,3.08,29.5,22,40,AlCrN,universal,.0650
+63540738,DLC-H-beschichtet,100,3,3.08,29.5,22,40,DLC-H,Aluminium,.0650
+63530753,unbeschichtet,125,3,3.08,42.0,22,40,-,-,.0650
+63540753,AlCrN-beschichtet,125,3,3.08,42.0,22,40,AlCrN,universal,.0650
+63540768,DLC-H-beschichtet,125,3,3.08,42.0,22,40,DLC-H,Aluminium,.0650
