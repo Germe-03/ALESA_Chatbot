@@ -67,47 +67,80 @@ class QAService:
 
         # 0) Article-number fast path with structured table lookup
         if self.product_store is not None and ARTICLE_RX.search(question or ""):
-            pr = self.product_store.find_by_code(question)
-            if pr is not None:
-                self.last_product = pr
+            prs = self.product_store.find_all_in_text(question)
+            if not prs:
+                pr_single = self.product_store.find_by_code(question)
+                prs = [pr_single] if pr_single else []
+            if prs:
+                self.last_product = prs[0]
+
                 def _clean(val: str) -> str:
                     if val is None:
                         return ""
                     v = val.strip()
                     if not v:
                         return ""
+                    if v.startswith('"') and v.endswith('"') and len(v) >= 2:
+                        v = v[1:-1].strip()
                     if v.upper() == "NULL":
                         return "NULL"
                     return v
 
-                cols = [
-                    ("d1", _clean(pr.d1)),
-                    ("b", _clean(pr.b)),
-                    ("b2", _clean(pr.b2)),
-                    ("Nuttiefe", _clean(pr.nuttiefe)),
-                    ("d2", _clean(pr.d2)),
-                    ("d3", _clean(pr.d3)),
-                    ("d4", _clean(pr.d4)),
-                    ("Saege-O", _clean(pr.saegen_o)),
-                    ("G", _clean(pr.g)),
-                    ("l1", _clean(pr.l1)),
-                    ("l2", _clean(pr.l2)),
-                    ("L", _clean(pr.l)),
-                    ("Zahnform", _clean(pr.zahnform)),
-                    ("Aufnahme", _clean(pr.aufnahme)),
-                ]
-                cols = [(h, v) for h, v in cols if v or v == "NULL"]
-                if not cols:
-                    answer = f"Keine Masse fuer Artikel {pr.code_raw} gefunden."
-                    return self._translate_out(answer, lang_guess.code), []
+                # group by familie/gruppe/fallback
+                groups: dict[str, List[ProductRow]] = {}
+                for pr in prs:
+                    key = (pr.gruppe or (pr.source_path.stem if pr.source_path else "") or pr.code_norm[:4] or "Artikel").strip()
+                    groups.setdefault(key, []).append(pr)
 
-                header = "| " + " | ".join(h for h, _ in cols) + " |\n"
-                header += "| " + " | ".join("---" for _ in cols) + " |\n"
-                row = "| " + " | ".join(v for _, v in cols) + " |"
-                answer = f"Mass fuer Artikel {pr.code_raw}:\n\n{header}{row}"
-                cite = f"{str(pr.source_path) if pr.source_path else ''}{(' S. ' + str(pr.source_page)) if pr.source_page else ''}"
-                cites = [c for c in [cite] if c.strip()]
-                answer = answer + "\n\nMoechten Sie dieses Produkt bestellen? (Antwort: 'ja' oder 'bestellen')"
+                cols_def = [
+                    ("Artikel", lambda p: p.code_raw),
+                    ("Gruppe", lambda p: p.gruppe or "-"),
+                    ("d1", lambda p: _clean(p.d1)),
+                    ("b", lambda p: _clean(p.b)),
+                    ("b2", lambda p: _clean(p.b2)),
+                    ("Nuttiefe", lambda p: _clean(p.nuttiefe)),
+                    ("d2", lambda p: _clean(p.d2)),
+                    ("d3", lambda p: _clean(p.d3)),
+                    ("d4", lambda p: _clean(p.d4)),
+                    ("Saege-O", lambda p: _clean(p.saegen_o)),
+                    ("L", lambda p: _clean(p.l)),
+                    ("l1", lambda p: _clean(p.l1)),
+                    ("l2", lambda p: _clean(p.l2)),
+                    ("G", lambda p: _clean(p.g)),
+                    ("Aufnahme", lambda p: _clean(p.aufnahme)),
+                ]
+
+                lines: List[str] = []
+                all_codes = ", ".join(pr.code_raw for pr in prs)
+                lines.append(f"Artikel: {all_codes}")
+                for gname, items in groups.items():
+                    lines.append(f"\nGruppe: {gname}")
+                    # determine columns that have data in this group
+                    active_cols = []
+                    for label, getter in cols_def:
+                        vals = [getter(p) for p in items]
+                        if any(v for v in vals):
+                            active_cols.append((label, getter))
+                    if not active_cols:
+                        continue
+                    header = "| " + " | ".join(l for l, _ in active_cols) + " |"
+                    sep = "| " + " | ".join("---" for _ in active_cols) + " |"
+                    rows = []
+                    for p in items:
+                        rows.append("| " + " | ".join(getter(p) or "-" for _, getter in active_cols) + " |")
+                    lines.extend([header, sep, *rows])
+
+                answer = "\n".join(lines)
+                cites_set = set()
+                for pr in prs:
+                    cite = f"{str(pr.source_path) if pr.source_path else ''}{(' S. ' + str(pr.source_page)) if pr.source_page else ''}"
+                    if cite.strip():
+                        cites_set.add(cite.strip())
+                cites = list(cites_set)
+
+                if _has_order_intent(question):
+                    answer = answer + "\n\nMoechten Sie dieses Produkt bestellen? (Antwort: 'ja' oder 'bestellen')"
+
                 return self._translate_out(answer, lang_guess.code), cites
 
         q = self._expand(retrieval_question)
@@ -131,3 +164,9 @@ class QAService:
         answer = (self.llm.generate(prompt) or "").strip()
         answer = answer if answer else "Keine passenden Quellen gefunden, daher generative Antwort ohne Belege."
         return self._translate_out(answer, lang_guess.code), []
+
+
+def _has_order_intent(text: str) -> bool:
+    low = (text or "").lower()
+    intents = ["bestellen", "kaufen", "order", "ich moechte", "ich möchte", "bitte bestellen"]
+    return any(t in low for t in intents)

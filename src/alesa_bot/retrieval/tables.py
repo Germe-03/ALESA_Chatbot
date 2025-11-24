@@ -75,6 +75,7 @@ HEADER_SYNONYMS: Dict[str, List[str]] = {
 class ProductRow:
     code_raw: str
     code_norm: str
+    gruppe: str = ""
     d1: str = ""
     b: str = ""
     b2: str = ""
@@ -95,6 +96,7 @@ class ProductRow:
     def as_row(self) -> List[str]:
         return [
             self.code_raw,
+            self.gruppe,
             self.d1, self.b, self.b2, self.nuttiefe, self.d2, self.d3, self.d4, self.saegen_o, self.g, self.l1, self.l2, self.l,
             self.zahnform, self.aufnahme,
         ]
@@ -141,6 +143,8 @@ class ProductTableStore:
                 return "b"
             if s in ("b1", "b2", "blattdicke", "koerper", "koerperdicke", "koerper dicke"):
                 return "b2"
+            if "typ" in s or "modell" in s or s in ("family", "familie", "gruppe", "artikelgruppe"):
+                return "gruppe"
             if s in ("nuttiefe", "nut tiefe", "t", "t1", "h"):
                 return "nuttiefe"
             if s in ("d2",):
@@ -206,6 +210,7 @@ class ProductTableStore:
                         pr = ProductRow(
                             code_raw=code_raw,
                             code_norm=code_norm,
+                            gruppe=getv("gruppe"),
                             d1=_nz_numeric(getv("d1")),
                             b=_nz_numeric(getv("b")),
                             b2=_nz_numeric(getv("b2")),
@@ -283,7 +288,7 @@ class ProductTableStore:
                     return False
                 return True
             return sum(1 for v in [
-                x.d1, x.b, x.b2, x.nuttiefe, x.d2, x.d3, x.d4, x.saegen_o, x.g, x.l1, x.l2, x.l, x.zahnform, x.aufnahme
+                x.d1, x.b, x.b2, x.nuttiefe, x.d2, x.d3, x.d4, x.saegen_o, x.g, x.l1, x.l2, x.l, x.zahnform, x.aufnahme, x.gruppe
             ] if _is_val(v))
         if _filled(row) > _filled(prev):
             self.by_code[row.code_norm] = row
@@ -292,6 +297,23 @@ class ProductTableStore:
     def find_by_code(self, code: str) -> Optional[ProductRow]:
         n = normalize_article(code)
         return self.by_code.get(n)
+
+    def find_all_in_text(self, text: str) -> List[ProductRow]:
+        """Find all article numbers in text and return matching rows."""
+        if not text:
+            return []
+        matches = ARTICLE_RX.findall(text)
+        seen = set()
+        rows: List[ProductRow] = []
+        for a, b in matches:
+            norm = (a + b)
+            if norm in seen:
+                continue
+            seen.add(norm)
+            pr = self.by_code.get(norm)
+            if pr:
+                rows.append(pr)
+        return rows
 
 
 def _detect_header_order(lines: List[str]) -> List[str]:
