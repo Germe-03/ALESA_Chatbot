@@ -1,6 +1,7 @@
 # src/alesa_bot/services/qa_service.py
 from __future__ import annotations
 
+import logging
 from typing import List, Optional, Tuple
 
 from src.alesa_bot.core.types import Hit, LLM, Retriever
@@ -30,6 +31,7 @@ class QAService:
         self.last_product: Optional[ProductRow] = None
         # remembers Sprache der letzten Anfrage (z. B. fuer UI oder Tests)
         self.last_lang: str = "de"
+        self._log = logging.getLogger(__name__)
 
     # -------- interne Helfer --------
 
@@ -68,11 +70,40 @@ class QAService:
             pr = self.product_store.find_by_code(question)
             if pr is not None:
                 self.last_product = pr
-                header = "| d1 | b | b2 | Nuttiefe | d2 | d3 | Zahnform | Aufnahme |\n|---|---|---|---|---|---|---|---|\n"
-                row = (
-                    f"| {pr.d1 or '-'} | {pr.b or '-'} | {pr.b2 or '-'} | {pr.nuttiefe or '-'} | "
-                    f"{pr.d2 or '-'} | {pr.d3 or '-'} | {pr.zahnform or '-'} | {pr.aufnahme or '-'} |"
-                )
+                def _clean(val: str) -> str:
+                    if val is None:
+                        return ""
+                    v = val.strip()
+                    if not v:
+                        return ""
+                    if v.upper() == "NULL":
+                        return "NULL"
+                    return v
+
+                cols = [
+                    ("d1", _clean(pr.d1)),
+                    ("b", _clean(pr.b)),
+                    ("b2", _clean(pr.b2)),
+                    ("Nuttiefe", _clean(pr.nuttiefe)),
+                    ("d2", _clean(pr.d2)),
+                    ("d3", _clean(pr.d3)),
+                    ("d4", _clean(pr.d4)),
+                    ("Saege-O", _clean(pr.saegen_o)),
+                    ("G", _clean(pr.g)),
+                    ("l1", _clean(pr.l1)),
+                    ("l2", _clean(pr.l2)),
+                    ("L", _clean(pr.l)),
+                    ("Zahnform", _clean(pr.zahnform)),
+                    ("Aufnahme", _clean(pr.aufnahme)),
+                ]
+                cols = [(h, v) for h, v in cols if v or v == "NULL"]
+                if not cols:
+                    answer = f"Keine Masse fuer Artikel {pr.code_raw} gefunden."
+                    return self._translate_out(answer, lang_guess.code), []
+
+                header = "| " + " | ".join(h for h, _ in cols) + " |\n"
+                header += "| " + " | ".join("---" for _ in cols) + " |\n"
+                row = "| " + " | ".join(v for _, v in cols) + " |"
                 answer = f"Mass fuer Artikel {pr.code_raw}:\n\n{header}{row}"
                 cite = f"{str(pr.source_path) if pr.source_path else ''}{(' S. ' + str(pr.source_page)) if pr.source_page else ''}"
                 cites = [c for c in [cite] if c.strip()]
@@ -81,11 +112,22 @@ class QAService:
 
         q = self._expand(retrieval_question)
         hits: List[Hit] = self.retriever.search(q, top_k=8)
-        must_have_sources(len(hits))
-        snippets = [h.snippet for h in hits]
-        prompt = build_prompt(self.system_prompt, snippets, retrieval_question, user_lang=lang_guess.code)
+        has_sources = must_have_sources(len(hits))
+
+        if has_sources:
+            snippets = [h.snippet for h in hits]
+            prompt = build_prompt(self.system_prompt, snippets, retrieval_question, user_lang=lang_guess.code)
+            self.llm.start()
+            answer = (self.llm.generate(prompt) or "").strip()
+            cites = [f"[{i+1}] {h.path}{(' S. ' + str(h.page)) if h.page else ''}" for i, h in enumerate(hits)]
+            answer = answer if answer else "Dafuer habe ich in den Dateien keine Quelle gefunden."
+            return self._translate_out(answer, lang_guess.code), cites
+
+        # Fallback: generative Antwort ohne Quellen
+        if self._log:
+            self._log.info("Keine Treffer aus Retrieval – Fallback auf generative Antwort ohne Quellen.")
+        prompt = build_prompt(self.system_prompt, [], retrieval_question, user_lang=lang_guess.code)
         self.llm.start()
         answer = (self.llm.generate(prompt) or "").strip()
-        cites = [f"[{i+1}] {h.path}{(' S. ' + str(h.page)) if h.page else ''}" for i, h in enumerate(hits)]
-        answer = answer if answer else "Dafuer habe ich in den Dateien keine Quelle gefunden."
-        return self._translate_out(answer, lang_guess.code), cites
+        answer = answer if answer else "Keine passenden Quellen gefunden, daher generative Antwort ohne Belege."
+        return self._translate_out(answer, lang_guess.code), []

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 
-def must_have_sources(found_count: int) -> None:
-    if found_count <= 0:
-        raise ValueError("Keine passenden Quellen gefunden.")
+def must_have_sources(found_count: int) -> bool:
+    """Gibt True zurück, wenn mindestens eine Quelle gefunden wurde, sonst False. Wirft keine Exception mehr."""
+    return found_count > 0
 

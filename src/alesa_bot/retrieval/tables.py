@@ -28,14 +28,15 @@ def normalize_article(s: str) -> str:
 
 
 def _nz_numeric(s: str) -> str:
-    """Return 'NULL' (SQL-style) when a numeric cell is empty.
-
-    Used for numeric-like fields: d1, b, b2, nuttiefe, d2, d3, aufnahme.
-    """
+    """Normalize numeric-ish cell values, preserving explicit 'NULL' markers."""
     if s is None:
-        return "NULL"
+        return ""
     s2 = s.strip()
-    return s2 if s2 else "NULL"
+    if not s2:
+        return ""
+    if s2.lower() == "null":
+        return "NULL"
+    return s2
 
 
 HEADER_SYNONYMS: Dict[str, List[str]] = {
@@ -53,6 +54,13 @@ HEADER_SYNONYMS: Dict[str, List[str]] = {
     # Zusatzdurchmesser
     "d2": ["d2", "D2"],
     "d3": ["d3", "D3"],
+    "d4": ["d4", "D4"],
+    # weitere Längen/Gewichte
+    "saegen_o": ["fuer saegen o", "fuer saegen o", "saegen o", "saegen  o", "saege o", "saege  o"],
+    "g": ["g", "gewicht"],
+    "l1": ["l1", "l 1", "l-1"],
+    "l2": ["l2", "l 2", "l-2"],
+    "l": ["l", "laenge", "l gesamt", "gesamtlaenge"],
     # Zähne
     "zahnform": ["zahnform", "zahn-form", "form", "zähneform"],
     # Aufnahme/Bohrung
@@ -73,6 +81,12 @@ class ProductRow:
     nuttiefe: str = ""
     d2: str = ""
     d3: str = ""
+    d4: str = ""
+    saegen_o: str = ""
+    g: str = ""
+    l1: str = ""
+    l2: str = ""
+    l: str = ""
     zahnform: str = ""
     aufnahme: str = ""
     source_path: Optional[Path] = None
@@ -81,7 +95,8 @@ class ProductRow:
     def as_row(self) -> List[str]:
         return [
             self.code_raw,
-            self.d1, self.b, self.b2, self.nuttiefe, self.d2, self.d3, self.zahnform, self.aufnahme,
+            self.d1, self.b, self.b2, self.nuttiefe, self.d2, self.d3, self.d4, self.saegen_o, self.g, self.l1, self.l2, self.l,
+            self.zahnform, self.aufnahme,
         ]
 
 
@@ -132,6 +147,18 @@ class ProductTableStore:
                 return "d2"
             if s in ("d3",):
                 return "d3"
+            if s in ("d4",):
+                return "d4"
+            if s in ("fuer saegen o", "fuer saegen o", "saegen o", "saegen  o", "saege o", "saege  o"):
+                return "saegen_o"
+            if s in ("g", "gewicht"):
+                return "g"
+            if s in ("l1", "l 1", "l-1"):
+                return "l1"
+            if s in ("l2", "l 2", "l-2"):
+                return "l2"
+            if s in ("l", "l gesamt", "laenge", "lange", "gesamtlaenge", "gesamt lange", "gesamt laenge"):
+                return "l"
             if s in ("zahnform", "form"):
                 return "zahnform"
             if s in ("aufnahme", "bohrung", "bohr d", "bohrungsdurchmesser", "innen d", "aufnahmen"):
@@ -185,6 +212,12 @@ class ProductTableStore:
                             nuttiefe=_nz_numeric(getv("nuttiefe")),
                             d2=_nz_numeric(getv("d2")),
                             d3=_nz_numeric(getv("d3")),
+                            d4=_nz_numeric(getv("d4")),
+                            saegen_o=_nz_numeric(getv("saegen_o")),
+                            g=_nz_numeric(getv("g")),
+                            l1=_nz_numeric(getv("l1")),
+                            l2=_nz_numeric(getv("l2")),
+                            l=_nz_numeric(getv("l")),
                             zahnform=getv("zahnform"),
                             aufnahme=_nz_numeric(getv("aufnahme")),
                         )
@@ -249,7 +282,9 @@ class ProductTableStore:
                 if vs.upper() == "NULL":
                     return False
                 return True
-            return sum(1 for v in [x.d1, x.b, x.b2, x.nuttiefe, x.d2, x.d3, x.zahnform, x.aufnahme] if _is_val(v))
+            return sum(1 for v in [
+                x.d1, x.b, x.b2, x.nuttiefe, x.d2, x.d3, x.d4, x.saegen_o, x.g, x.l1, x.l2, x.l, x.zahnform, x.aufnahme
+            ] if _is_val(v))
         if _filled(row) > _filled(prev):
             self.by_code[row.code_norm] = row
 
@@ -316,6 +351,11 @@ def _extract_rows_from_page(text: str) -> List[ProductRow]:
             nuttiefe=_nz_numeric(fields.get("nuttiefe", "")),
             d2=_nz_numeric(fields.get("d2", "")),
             d3=_nz_numeric(fields.get("d3", "")),
+            d4=_nz_numeric(fields.get("d4", "")),
+            g=_nz_numeric(fields.get("g", "")),
+            l1=_nz_numeric(fields.get("l1", "")),
+            l2=_nz_numeric(fields.get("l2", "")),
+            l=_nz_numeric(fields.get("l", "")),
             zahnform=fields.get("zahnform", ""),
             aufnahme=_nz_numeric(fields.get("aufnahme", "")),
         ))

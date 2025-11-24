@@ -11,6 +11,7 @@ Der Controller kennt keine Ein-/Ausgabe. Er liefert nur Text-Antworten
 (zur Anzeige durch die UI-Schicht).
 """
 
+import re
 from typing import List
 from src.alesa_bot.services.order_flow import OrderFlow
 from src.alesa_bot.services.qa_service import QAService
@@ -171,6 +172,26 @@ class AppController:
             # Leere Eingabe: kein Output
             return []
 
+        # D-0.1) Allgemeine/unspezifische Artikel-Fragen: erst nachfragen, kein Retrieval
+        if _is_general_product_query(q):
+            responses.append("Gerne, zu welchen Artikeln oder Produkten hast du genau Fragen?")
+            return responses
+
+        # D0) Smalltalk/Meta: ohne Retrieval direkt generativ antworten
+        if _is_smalltalk(q):
+            try:
+                prompt = (
+                    f"{self.qa_service.system_prompt}\n\n"
+                    f"User: {q}\n"
+                    "Assistent: Antworte kurz, freundlich, ohne Quellen."
+                )
+                self.qa_service.llm.start()
+                answer = (self.qa_service.llm.generate(prompt) or "").strip()
+            except Exception:
+                answer = "Hallo! Wie kann ich helfen?"
+            responses.append(answer)
+            return responses
+
         try:
             answer, cites = self.qa_service.ask(q)
         except ValueError as ve:
@@ -224,3 +245,47 @@ class AppController:
             return self.rma_service.persist_and_notify(payload)  # type: ignore[return-value]
         except Exception:
             return None
+
+
+def _is_smalltalk(text: str) -> bool:
+    """Einfache Heuristik für Begrüßung/Smalltalk/Meta ohne Retrieval."""
+    low = (text or "").lower().strip()
+    if not low:
+        return False
+    if len(low) > 80:
+        return False
+    triggers = [
+        "hallo", "hi", "hey", "guten tag", "moin", "servus", "gruezi", "ciao",
+        "was kannst du", "wer bist du", "was bist du", "was machst du",
+        "auf deutsch bitte", "sprich deutsch", "auf deutsch", "in deutsch",
+        "help", "hilfe", "was geht", "wie geht",
+        "danke", "thanks", "ok", "alles klar",
+        "schön dich kennen zu lernen", "schoen dich kennen zu lernen", "schon dich kennen zu lernen",
+        "ich bin", "und du",
+    ]
+    for t in triggers:
+        if t in low:
+            return True
+    # sehr kurze Eingaben mit nur Grußworten
+    if len(low.split()) <= 3 and re.fullmatch(r"(hallo|hi|hey|hello|yo|moin|servus)[!\\.]*", low):
+        return True
+    return False
+
+
+def _is_general_product_query(text: str) -> bool:
+    """Heuristik für unspezifische Fragen zu Artikeln/Produkten ohne Kontext."""
+    low = (text or "").lower().strip()
+    if not low:
+        return False
+    words = low.split()
+    has_frage = any("frag" in w for w in words)
+    has_item = any(
+        ("artikel" in w)
+        or ("produkt" in w)
+        or (w in {"produkte", "artikel?", "produkt?", "produkte?"})
+        for w in words
+    )
+    # kurz und ohne konkrete Codes/Nummern
+    if has_frage and has_item and len(words) <= 8 and not re.search(r"\d", low):
+        return True
+    return False

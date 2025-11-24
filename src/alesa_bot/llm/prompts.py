@@ -16,8 +16,7 @@ def build_prompt(system_prompt: str, snippets: List[str], question: str, user_la
         f"{lang_hint}\n"
         "ANTWORT-RICHTLINIEN:\n"
         "1) Antworte NUR auf Basis der Auszuege.\n"
-        "2) Decke ALLE gefragten Punkte ab. Wenn ein Punkt nicht belegt ist,\n"
-        "   markiere ihn exakt mit: [Keine Quelle in den Dateien gefunden].\n"
+        "2) Decke ALLE gefragten Punkte ab; mache klar, wenn etwas in den Auszuegen nicht steht.\n"
         "3) Gib die Antwort als nummerierte Liste aus (1., 2., 3., ...)."
     )
     return (
