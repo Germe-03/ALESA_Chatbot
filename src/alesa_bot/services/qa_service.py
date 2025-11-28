@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional, Tuple
 
 from src.alesa_bot.core.types import Hit, LLM, Retriever
@@ -74,18 +75,6 @@ class QAService:
             if prs:
                 self.last_product = prs[0]
 
-                def _clean(val: str) -> str:
-                    if val is None:
-                        return ""
-                    v = val.strip()
-                    if not v:
-                        return ""
-                    if v.startswith('"') and v.endswith('"') and len(v) >= 2:
-                        v = v[1:-1].strip()
-                    if v.upper() == "NULL":
-                        return "NULL"
-                    return v
-
                 # group by familie/gruppe/fallback
                 groups: dict[str, List[ProductRow]] = {}
                 for pr in prs:
@@ -95,19 +84,19 @@ class QAService:
                 cols_def = [
                     ("Artikel", lambda p: p.code_raw),
                     ("Gruppe", lambda p: p.gruppe or "-"),
-                    ("d1", lambda p: _clean(p.d1)),
-                    ("b", lambda p: _clean(p.b)),
-                    ("b2", lambda p: _clean(p.b2)),
-                    ("Nuttiefe", lambda p: _clean(p.nuttiefe)),
-                    ("d2", lambda p: _clean(p.d2)),
-                    ("d3", lambda p: _clean(p.d3)),
-                    ("d4", lambda p: _clean(p.d4)),
-                    ("Saege-O", lambda p: _clean(p.saegen_o)),
-                    ("L", lambda p: _clean(p.l)),
-                    ("l1", lambda p: _clean(p.l1)),
-                    ("l2", lambda p: _clean(p.l2)),
-                    ("G", lambda p: _clean(p.g)),
-                    ("Aufnahme", lambda p: _clean(p.aufnahme)),
+                    ("d1", lambda p: _clean_val(p.d1)),
+                    ("b", lambda p: _clean_val(p.b)),
+                    ("b2", lambda p: _clean_val(p.b2)),
+                    ("Nuttiefe", lambda p: _clean_val(p.nuttiefe)),
+                    ("d2", lambda p: _clean_val(p.d2)),
+                    ("d3", lambda p: _clean_val(p.d3)),
+                    ("d4", lambda p: _clean_val(p.d4)),
+                    ("Saege-O", lambda p: _clean_val(p.saegen_o)),
+                    ("L", lambda p: _clean_val(p.l)),
+                    ("l1", lambda p: _clean_val(p.l1)),
+                    ("l2", lambda p: _clean_val(p.l2)),
+                    ("G", lambda p: _clean_val(p.g)),
+                    ("Aufnahme", lambda p: _clean_val(p.aufnahme)),
                 ]
 
                 lines: List[str] = []
@@ -150,6 +139,44 @@ class QAService:
 
                 return self._translate_out(answer, lang_guess.code), cites
 
+        # 0b) Filter-basierte Produktsuche (z. B. "suche artikel mit d1: 40, b: 1.0, nuttiefe: 14.5")
+        if self.product_store is not None:
+            filters = _parse_product_filters(question)
+            if filters:
+                prs = self.product_store.filter_rows(filters)
+                if prs:
+                    lines: List[str] = []
+                    lines.append(f"Gefundene Artikel: {', '.join(p.code_raw for p in prs)}")
+                    cols_def = [
+                        ("Artikel", lambda p: p.code_raw),
+                        ("Gruppe", lambda p: p.gruppe or "-"),
+                        ("d1", lambda p: _clean_val(p.d1)),
+                        ("b", lambda p: _clean_val(p.b)),
+                        ("b2", lambda p: _clean_val(p.b2)),
+                        ("Nuttiefe", lambda p: _clean_val(p.nuttiefe)),
+                        ("d2", lambda p: _clean_val(p.d2)),
+                        ("d3", lambda p: _clean_val(p.d3)),
+                        ("Aufnahme", lambda p: _clean_val(p.aufnahme)),
+                    ]
+                    active_cols = []
+                    for label, getter in cols_def:
+                        vals = [getter(p) for p in prs]
+                        if any(v for v in vals):
+                            active_cols.append((label, getter))
+                    if active_cols:
+                        header = "| " + " | ".join(l for l, _ in active_cols) + " |"
+                        sep = "| " + " | ".join("---" for _ in active_cols) + " |"
+                        lines.append("\n" + header)
+                        lines.append(sep)
+                        for p in prs:
+                            lines.append("| " + " | ".join(getter(p) or "-" for _, getter in active_cols) + " |")
+                    answer = "\n".join(lines)
+                    cites: List[str] = []
+                    return self._translate_out(answer, lang_guess.code), cites
+                else:
+                    msg = "Keine Artikel gefunden für Filter: " + ", ".join(f"{k}={v}" for k, v in filters.items())
+                    return self._translate_out(msg, lang_guess.code), []
+
         q = self._expand(retrieval_question)
         hits: List[Hit] = self.retriever.search(q, top_k=8)
         has_sources = must_have_sources(len(hits))
@@ -174,6 +201,68 @@ class QAService:
 
 
 def _has_order_intent(text: str) -> bool:
-    low = (text or "").lower()
-    intents = ["bestellen", "kaufen", "order", "ich moechte", "ich möchte", "bitte bestellen"]
+    low = (text or '').lower()
+    intents = ["bestellen", "kaufen", "order", "ich moechte", "bitte bestellen"]
     return any(t in low for t in intents)
+
+
+def _parse_product_filters(text: str) -> dict:
+    """
+    Extrahiert einfache Filter aus Freitext wie 'd1: 40, b: 1.0, nuttiefe: 14.5'.
+    Robust gegen Kommas/Punkte/Einheiten (mm) und Synonyme (b1->b2, t->nuttiefe).
+    """
+    if not text:
+        return {}
+    t = text.lower()
+    # erlaubte Keys + Synonyme
+    key_map = {
+        "d1": "d1",
+        "d1mm": "d1",
+        "b": "b",
+        "b1": "b2",
+        "b2": "b2",
+        "nuttiefe": "nuttiefe",
+        "nut": "nuttiefe",
+        "t": "nuttiefe",
+        "d2": "d2",
+        "d3": "d3",
+        "d4": "d4",
+        "aufnahme": "aufnahme",
+        "gruppe": "gruppe",
+    }
+    # finde Paare key: value mit : oder =
+    pattern = re.compile(r"(d1mm|d1|b1|b2|b|nuttiefe|nut|t|d2|d3|d4|aufnahme|gruppe)\s*[:=]\s*([^,;\n]+)")
+    filters: dict[str, str] = {}
+    for m in pattern.finditer(t):
+        raw_key = m.group(1)
+        raw_val = m.group(2)
+        canon = key_map.get(raw_key)
+        if not canon:
+            continue
+        # Werte bereinigen: abschließende Kommas/Punkte/Anführungszeichen/Einheiten entfernen
+        val = raw_val.strip()
+        val = val.rstrip(",.;")
+        val = val.replace("mm", "").replace(" ", "")
+        val = val.replace('"', '').replace("'", "")
+        # nur die führende Zahl/Range extrahieren (z. B. "32angeben?" -> "32")
+        m_num = re.match(r"[0-9][0-9.,]*", val)
+        if m_num:
+            val = m_num.group(0)
+        if not val:
+            continue
+        filters[canon] = val
+    return filters
+
+
+def _clean_val(val: str) -> str:
+    """Trimmt Zellwerte und entfernt führende/abschließende Quotes sowie NULL."""
+    if val is None:
+        return ""
+    v = val.strip()
+    if not v:
+        return ""
+    if v.startswith('"') and v.endswith('"') and len(v) >= 2:
+        v = v[1:-1].strip()
+    if v.upper() == "NULL":
+        return "NULL"
+    return v

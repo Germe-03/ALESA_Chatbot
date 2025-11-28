@@ -324,6 +324,33 @@ class ProductTableStore:
                 rows.append(pr)
         return rows
 
+    def filter_rows(self, filters: Dict[str, str]) -> List[ProductRow]:
+        """
+        Fuzzy-Filter auf strukturierten Spalten, z. B. {"d1": "40", "b": "1.0"}.
+        Verwendet einfache Teilstring-Prüfung (case-insensitive, trim).
+        """
+        if not filters:
+            return []
+        # normalize filter values
+        f_norm = {k: (v or "").strip().lower() for k, v in filters.items() if v and v.strip()}
+        if not f_norm:
+            return []
+
+        def _val(v: str) -> str:
+            return (v or "").strip().lower()
+
+        rows: List[ProductRow] = []
+        for pr in self.by_code.values():
+            ok = True
+            for k, needle in f_norm.items():
+                hay = _val(getattr(pr, k, ""))
+                if needle not in hay:
+                    ok = False
+                    break
+            if ok:
+                rows.append(pr)
+        return rows
+
 
 def _detect_header_order(lines: List[str]) -> List[str]:
     best_idx, best_score, best_cols = -1, -1, []

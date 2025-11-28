@@ -1,0 +1,9 @@
+1. Stelle zeigt welche Produktgruppe der Artikel gehört
+1 = Wendeschneitplatte
+6 = Nutex
+
+5. Stelle sagt ob es ein Lageratikel, Spezialartikel oder Norm-Spez Artikel ist
+0 = Lagerartikel
+5 = Norm-Spez
+6 = Norm-Spez
+9 = Spezialartikel
