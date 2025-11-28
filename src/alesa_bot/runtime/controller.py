@@ -71,8 +71,8 @@ class AppController:
         q = (user_text or "").strip()
         low = q.lower()
 
-        # E-1) Wenn exakt "bestellen" eingegeben wird: Bestellvorgang starten
-        if not self.order_flow.is_active() and low == "bestellen":
+        # E-1) Klare Startsignale: direkt in den Bestell-Flow springen
+        if not self.order_flow.is_active() and _is_direct_order_command(q):
             responses.append(self.order_flow.start())
             return responses
 
@@ -130,8 +130,8 @@ class AppController:
         # ------------------------
         # C) Gate bei Kaufintention
         # ------------------------
-        # C) Gate nur, wenn nicht lediglich das Wort 'bestellen' im Satz vorkommt
-        if ("bestellen" not in low) and (not self.pre_gate.suppress_next_gate) and self.pre_gate.should_prompt_gate(q):
+        # C) Gate bei Kaufintention (auch bei Fragen wie "kann ich bei dir bestellen?")
+        if (not self.pre_gate.suppress_next_gate) and self.pre_gate.should_prompt_gate(q):
             prompt = self.pre_gate.start(q)
             responses.append(prompt)
             return responses
@@ -269,6 +269,26 @@ def _is_smalltalk(text: str) -> bool:
     # sehr kurze Eingaben mit nur Grußworten
     if len(low.split()) <= 3 and re.fullmatch(r"(hallo|hi|hey|hello|yo|moin|servus)[!\\.]*", low):
         return True
+    return False
+
+
+def _is_direct_order_command(text: str) -> bool:
+    """Erkennt explizite Startbefehle für den Bestell-Assistenten."""
+    low = (text or "").strip().lower()
+    if not low:
+        return False
+    if low == "bestellen":
+        return True
+    patterns = [
+        r"\bich\s+moe?chte\s+bestellen\b",
+        r"\bich\s+will\s+bestellen\b",
+        r"\bbitte\s+.*\bbestellen\b",
+        r"\bstart[e]?\s+.*\bbestell",  # z. B. "starte den bestellassistenten"
+        r"\bbestellassistent\b.*\bstart",
+    ]
+    for p in patterns:
+        if re.search(p, low):
+            return True
     return False
 
 

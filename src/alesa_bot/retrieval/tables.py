@@ -90,6 +90,7 @@ class ProductRow:
     l: str = ""
     zahnform: str = ""
     aufnahme: str = ""
+    aufnahme_label: str = ""
     source_path: Optional[Path] = None
     source_page: Optional[int] = None
 
@@ -167,6 +168,9 @@ class ProductTableStore:
                 return "zahnform"
             if s in ("aufnahme", "bohrung", "bohr d", "bohrungsdurchmesser", "innen d", "aufnahmen"):
                 return "aufnahme"
+            # Catch-all: handle headers that contain "aufnahme" or "bohr" even with extra tokens
+            if "aufnahme" in s or "bohr" in s:
+                return "aufnahme"
             return ""
 
         count = 0
@@ -180,16 +184,20 @@ class ProductTableStore:
                     delim = guess_delim(first)
                     headers_raw = [h.strip() for h in first.strip().split(delim)]
                     headers = [canonize_header(h) for h in headers_raw]
-                    # Build index map for needed fields
+                    # Build index map for needed fields and remember original label for Aufnahme
                     idx: Dict[str, int] = {}
+                    aufnahme_label: Dict[int, str] = {}
                     for i, h in enumerate(headers):
                         if h and h not in idx:
                             idx[h] = i
-                    # iterate remaining lines
-                    for line in fp:
-                        if not line or not line.strip() or set(line.strip()) == set(";,"):
+                            if h == "aufnahme":
+                                # keep the original header wording so we can show it to users
+                                aufnahme_label[i] = headers_raw[i]
+                    # iterate remaining lines using csv.reader to keep quoted fields intact (z. B. mehrere Aufnahmen)
+                    reader = csv.reader(fp, delimiter=delim)
+                    for parts in reader:
+                        if not parts or not any(p.strip() for p in parts):
                             continue
-                        parts = [p.strip() for p in line.rstrip("\n\r").split(delim)]
                         # pad parts to length of header for safe indexing
                         if len(parts) < len(headers):
                             parts += [""] * (len(headers) - len(parts))
@@ -225,6 +233,7 @@ class ProductTableStore:
                             l=_nz_numeric(getv("l")),
                             zahnform=getv("zahnform"),
                             aufnahme=_nz_numeric(getv("aufnahme")),
+                            aufnahme_label=aufnahme_label.get(idx.get("aufnahme", -1), ""),
                         )
                         self._upsert(pr)
                         count += 1

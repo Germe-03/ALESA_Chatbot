@@ -90,11 +90,16 @@ function init(){
   }
 
   btn.addEventListener('click', submit);
-  ta.addEventListener('keydown', (e)=>{
-    if (e.key==='Enter' && !e.shiftKey){
-      e.preventDefault(); submit();
+
+  // Enter zum Senden, Shift+Enter = Zeilenumbruch; ignoriert IME-Komposition
+  const handleEnter = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){
+      e.preventDefault();
+      submit();
     }
-  });
+  };
+  ta.addEventListener('keydown', handleEnter);
+  ta.addEventListener('keyup', handleEnter); // Fallback, falls keydown unterdrückt wird
 }
 
 window.addEventListener('DOMContentLoaded', init);

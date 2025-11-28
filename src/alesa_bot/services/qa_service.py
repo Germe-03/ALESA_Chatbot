@@ -123,7 +123,14 @@ class QAService:
                             active_cols.append((label, getter))
                     if not active_cols:
                         continue
-                    header = "| " + " | ".join(l for l, _ in active_cols) + " |"
+                    # dynamischer Headername für Aufnahme: original CSV-Label falls vorhanden
+                    def _label_for(col_label: str) -> str:
+                        if col_label != "Aufnahme":
+                            return col_label
+                        raw_label = next((getattr(p, "aufnahme_label", "") for p in items if getattr(p, "aufnahme_label", "")), "")
+                        return raw_label or "Aufnahme"
+
+                    header = "| " + " | ".join(_label_for(l) for l, _ in active_cols) + " |"
                     sep = "| " + " | ".join("---" for _ in active_cols) + " |"
                     rows = []
                     for p in items:

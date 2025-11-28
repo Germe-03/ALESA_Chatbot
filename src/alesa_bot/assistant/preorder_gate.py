@@ -43,11 +43,9 @@ _PURCHASE_REGEXES = [
 ]
 
 def is_strong_purchase_intent(text: str) -> bool:
-    """Positive Kaufabsicht, aber keine Frage."""
+    """Positive Kaufabsicht (Frage oder Aussage)."""
     t = (text or "").strip()
     if not t:
-        return False
-    if is_question(t):
         return False
     return any(rx.search(t) for rx in _PURCHASE_REGEXES)
 
@@ -126,8 +124,11 @@ class PreOrderGate:
     def should_prompt_gate(self, user_text: str) -> bool:
         """
         Entscheidet, ob das Gate überhaupt gefragt werden soll.
-        Wir fragen NICHT bei Fragen, nur bei starker Kaufabsicht.
+        Wir fragen bei starker Kaufabsicht oder Bestell-Nachfragen.
         """
-        if is_question(user_text):
+        t = (user_text or "")
+        if not t.strip():
             return False
-        return is_strong_purchase_intent(user_text)
+        if is_question(t) and "bestell" in t.lower():
+            return True
+        return is_strong_purchase_intent(t)
