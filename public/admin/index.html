@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ALESA Mitarbeiterportal – Bestellungen</title>
+    <title>ALESA Mitarbeiterportal - Bestellungen & Chats</title>
     <link rel="stylesheet" href="/assets/style.css" />
     <style>
       .table{width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden}
@@ -13,6 +13,21 @@
       .pill{display:inline-block; padding:2px 8px; border-radius:999px; background:var(--primary-050); color:var(--primary-600); margin-right:6px}
       .small{color:var(--muted); font-size:.85rem}
       .wrap{white-space:pre-wrap}
+      .tabs{display:flex; gap:10px; margin:12px 0 18px}
+      .tab{padding:8px 14px; border:1px solid var(--border); background:#fff; border-radius:10px; cursor:pointer; font-weight:600; color:var(--muted)}
+      .tab.active{background:var(--primary-050); color:var(--primary-600); border-color:var(--primary-200,#d3e4ff)}
+      .flex{display:flex; gap:16px}
+      .panel{background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px; flex:1; min-height:320px; box-shadow:0 10px 30px rgba(11,108,255,.06)}
+      .session{padding:10px 12px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; background:#fafcff}
+      .session.active{border-color:var(--primary); box-shadow:0 0 0 2px rgba(11,108,255,.1)}
+      .session-id{font-weight:700; font-size:.95rem}
+      .muted{color:var(--muted)}
+      .msg-card{border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px; background:#fff}
+      .msg-role{font-weight:700; color:var(--primary-600); margin-bottom:4px}
+      .chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px}
+      .chip{background:var(--primary-050); color:var(--primary-600); padding:2px 8px; border-radius:999px; font-size:.8rem}
+      .cluster-card{border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:10px; background:#fff}
+      .tagline{display:inline-block; padding:2px 8px; border-radius:999px; background:var(--primary-050); color:var(--primary-600); margin-right:6px; font-size:.8rem}
     </style>
   </head>
   <body>
@@ -23,31 +38,76 @@
             <div class="logo" aria-hidden="true"></div>
             <div>
               <div class="title">Mitarbeiterportal</div>
-              <div class="subtitle">Bestellungen aus dem Chatbot</div>
+              <div class="subtitle">Bestellungen & Chat-Insights</div>
             </div>
           </div>
         </div>
       </header>
       <main class="container" style="padding:20px 16px 120px">
-        <h2>Bestellungen</h2>
-        <div id="meta" class="small"></div>
-        <div style="overflow:auto">
-          <table class="table" id="tbl">
-            <thead>
-              <tr>
-                <th>ID/Zeit</th>
-                <th>Kunde</th>
-                <th>Positionen</th>
-                <th>Kommentar</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+        <div class="tabs">
+          <button class="tab active" data-tab="orders">Bestellungen</button>
+          <button class="tab" data-tab="chats">Chats</button>
+          <button class="tab" data-tab="clusters">Cluster</button>
         </div>
+
+        <section id="orders-section">
+          <h2>Bestellungen</h2>
+          <div id="meta" class="small"></div>
+          <div style="overflow:auto">
+            <table class="table" id="tbl">
+              <thead>
+                <tr>
+                  <th>ID/Zeit</th>
+                  <th>Kunde</th>
+                  <th>Positionen</th>
+                  <th>Kommentar</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="chats-section" style="display:none">
+          <div class="flex">
+            <div class="panel" style="max-width:320px">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                <h3 style="margin:0">Sessions</h3>
+                <div id="chat-meta" class="small"></div>
+              </div>
+              <div id="session-list"></div>
+            </div>
+            <div class="panel">
+              <div id="session-title" class="muted small" style="margin-bottom:8px">Session waehlen</div>
+              <div id="messages"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="clusters-section" style="display:none">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <h2 style="margin:0">Themen-Cluster</h2>
+            <label class="small">Cluster: <input type="number" id="cluster-count" value="8" min="2" max="50" style="width:60px"></label>
+            <button class="btn" id="refresh-clusters" style="height:auto; padding:6px 12px; box-shadow:none">Neu laden</button>
+          </div>
+          <div id="cluster-meta" class="small"></div>
+          <div id="cluster-list"></div>
+        </section>
       </main>
     </div>
 
     <script>
+      const state = {tab:'orders', sessions:[], selected:null, clusters:[]};
+
+      function escapeHtml(s){
+        return (s||'')
+          .replaceAll('&','&amp;')
+          .replaceAll('<','&lt;')
+          .replaceAll('>','&gt;')
+          .replaceAll('"','&quot;')
+          .replaceAll("'",'&#39;');
+      }
+
       async function loadOrders(){
         const r = await fetch('/admin/orders');
         const j = await r.json();
@@ -59,15 +119,137 @@
           const tr = document.createElement('tr');
           const cust = o.customer || {}; const items = o.items||[];
           const cell = (html)=>{ const td=document.createElement('td'); td.innerHTML=html; return td };
-          tr.appendChild(cell(`<div><strong>${o.id}</strong></div><div class="small">${o.created_at||''}</div>`));
-          tr.appendChild(cell(`${cust.kundennummer?`Kundennr.: ${cust.kundennummer}<br>`:''}${cust.typ||''} ${cust.name||''}<br>${cust.strasse_nr||''}<br>${cust.plz_ort||''}<br>${cust.email||''}`));
-          tr.appendChild(cell(items.map((it,i)=>`<span class="pill">${i+1}</span> ${it.artikelnummer||'-'} × ${it.menge||'-'}`).join('<br>')));
-          tr.appendChild(cell(`<div class="wrap">${o.comment||''}</div>`));
+          tr.appendChild(cell(`<div><strong>${escapeHtml(o.id)}</strong></div><div class="small">${escapeHtml(o.created_at)||''}</div>`));
+          tr.appendChild(cell(`${cust.kundennummer?`Kundennr.: ${escapeHtml(cust.kundennummer)}<br>`:''}${escapeHtml(cust.typ)||''} ${escapeHtml(cust.name)||''}<br>${escapeHtml(cust.strasse_nr)||''}<br>${escapeHtml(cust.plz_ort)||''}<br>${escapeHtml(cust.email)||''}`));
+          tr.appendChild(cell(items.map((it,i)=>`<span class="pill">${i+1}</span> ${escapeHtml(it.artikelnummer)||'-'} \u2013 ${escapeHtml(it.menge)||'-'}`).join('<br>')));
+          tr.appendChild(cell(`<div class="wrap">${escapeHtml(o.comment)||''}</div>`));
           tb.appendChild(tr);
         }
       }
       loadOrders().catch(console.error);
       setInterval(loadOrders, 5000);
+
+      async function loadChats(){
+        if (state.tab !== 'chats') return;
+        const r = await fetch('/admin/chats');
+        const j = await r.json();
+        state.sessions = j.chats || [];
+        renderSessions();
+      }
+
+      function renderSessions(){
+        const list = document.getElementById('session-list');
+        list.innerHTML = '';
+        document.getElementById('chat-meta').textContent = `${state.sessions.length} Session(s)`;
+        if (!state.sessions.length){
+          list.innerHTML = '<div class="muted small">Keine Sessions gespeichert.</div>';
+          return;
+        }
+        for (const s of state.sessions){
+          const div = document.createElement('div');
+          div.className = 'session' + (s.session_id===state.selected ? ' active':'');
+          div.innerHTML = `
+            <div class="session-id">${escapeHtml(s.session_id)}</div>
+            <div class="small muted">${escapeHtml(s.created_at)||'-'} - ${escapeHtml(s.last_seen)||''}</div>
+            <div class="small">${s.messages||0} Nachricht(en)</div>
+          `;
+          div.addEventListener('click', ()=> selectSession(s.session_id));
+          list.appendChild(div);
+        }
+      }
+
+      async function selectSession(sessionId){
+        state.selected = sessionId;
+        document.getElementById('session-title').textContent = sessionId ? `Session ${sessionId}` : 'Session waehlen';
+        const r = await fetch(`/admin/chats/${encodeURIComponent(sessionId)}`);
+        const j = await r.json();
+        renderMessages(j.messages || []);
+        renderSessions(); // update highlight
+      }
+
+      function renderMessages(msgs){
+        const wrap = document.getElementById('messages');
+        wrap.innerHTML = '';
+        if (!msgs.length){
+          wrap.innerHTML = '<div class="muted small">Keine Nachrichten in dieser Session.</div>';
+          return;
+        }
+        for (const m of msgs){
+          const card = document.createElement('div');
+          card.className = 'msg-card';
+          const role = escapeHtml(m.role || '');
+          const body = escapeHtml(m.message || '').replace(/\\n/g,'<br>');
+          card.innerHTML = `
+            <div class="msg-role">${role.toUpperCase()} <span class="small muted" style="font-weight:400">${escapeHtml(m.ts||'')}</span></div>
+            <div class="wrap">${body}</div>
+          `;
+          const chips = [];
+          const sources = Array.isArray(m.sources) ? m.sources : [];
+          for (const s of sources){ chips.push(`<span class="chip">${escapeHtml(s)}</span>`); }
+          if (chips.length){
+            const chipsWrap = document.createElement('div');
+            chipsWrap.className = 'chips';
+            chipsWrap.innerHTML = chips.join('');
+            card.appendChild(chipsWrap);
+          }
+          wrap.appendChild(card);
+        }
+      }
+
+      async function loadClusters(){
+        if (state.tab !== 'clusters') return;
+        const n = Number(document.getElementById('cluster-count').value) || 8;
+        const r = await fetch(`/admin/clusters?n_clusters=${encodeURIComponent(n)}`);
+        const j = await r.json();
+        state.clusters = j.clusters || [];
+        renderClusters();
+      }
+
+      function renderClusters(){
+        const wrap = document.getElementById('cluster-list');
+        wrap.innerHTML = '';
+        document.getElementById('cluster-meta').textContent = `${state.clusters.length} Cluster`;
+        if (!state.clusters.length){
+          wrap.innerHTML = '<div class="muted small">Keine Cluster berechnet.</div>';
+          return;
+        }
+        for (const c of state.clusters){
+          const card = document.createElement('div');
+          card.className = 'cluster-card';
+          const examples = (c.example_queries||[]).map(t=>`<div class="small">\u2022 ${escapeHtml(t)}</div>`).join('');
+          const terms = (c.top_terms||[]).slice(0,10).map(t=>`<span class="tagline">${escapeHtml(t)}</span>`).join('');
+          card.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
+              <div><strong>Cluster ${c.cluster_id}</strong></div>
+              <div class="small muted">${c.count||0} Anfragen</div>
+            </div>
+            <div class="small muted">Top-Terme</div>
+            <div style="margin:6px 0">${terms || '<span class="muted small">Keine Terme</span>'}</div>
+            <div class="small muted">Beispiele</div>
+            ${examples || '<div class="muted small">Keine Beispiele</div>'}
+          `;
+          wrap.appendChild(card);
+        }
+      }
+
+      function switchTab(tab){
+        state.tab = tab;
+        document.querySelectorAll('.tab').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.tab === tab);
+        });
+        document.getElementById('orders-section').style.display = tab === 'orders' ? 'block' : 'none';
+        document.getElementById('chats-section').style.display = tab === 'chats' ? 'block' : 'none';
+        document.getElementById('clusters-section').style.display = tab === 'clusters' ? 'block' : 'none';
+        if (tab === 'chats'){ loadChats(); }
+        if (tab === 'clusters'){ loadClusters(); }
+      }
+
+      document.querySelectorAll('.tab').forEach(btn=>{
+        btn.addEventListener('click', ()=> switchTab(btn.dataset.tab));
+      });
+      document.getElementById('refresh-clusters').addEventListener('click', ()=> loadClusters().catch(console.error));
+
+      setInterval(loadChats, 6000);
     </script>
   </body>
- </html>
+</html>

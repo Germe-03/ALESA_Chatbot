@@ -11,6 +11,7 @@ from src.alesa_bot.runtime.factory import build_core, new_controller
 from src.alesa_bot.services.order_repo import OrderRecord
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.runtime.controller import AppController
+from src.alesa_bot.analytics.query_clustering import build_clusters_cache, get_cached_clusters
 
 # ------------------------------------------------------------
 # App & CORS Setup
@@ -43,6 +44,8 @@ qa = QAService(
     query_expand=True,
     product_store=core.prod_store,
 )
+# Cluster einmal beim Start berechnen (Admin-Analytics)
+clusters_snapshot = build_clusters_cache()
 
 # ------------------------------------------------------------
 # Session controllers for full dialog (incl. orders)
@@ -125,6 +128,33 @@ def add_order(payload: dict = Body(...)):
         raise HTTPException(status_code=400, detail=f"Invalid order payload: {e}")
 
 
+@app.get("/admin/chats")
+def list_chats():
+    if core.logger is None:
+        return {"chats": []}
+    return {"chats": core.logger.list_sessions(limit=300)}
+
+
+@app.get("/admin/chats/{session_id}")
+def get_chat(session_id: str):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing session id")
+    if core.logger is None:
+        return {"messages": []}
+    return {"messages": core.logger.list_messages(session_id=session_id, limit=800)}
+
+
+@app.get("/admin/clusters")
+def list_clusters(n_clusters: int = 8):
+    try:
+        # Auf Anfrage andere k berechnen; sonst Start-Snapshot nutzen
+        if n_clusters != 8:
+            return build_clusters_cache(n_clusters=n_clusters)
+        return get_cached_clusters(n_clusters=n_clusters)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Clustering failed: {e}")
+
+
 # ------------------------------------------------------------
 # Chat endpoint with session state (Controller orchestration)
 # ------------------------------------------------------------
@@ -133,7 +163,20 @@ def chat(session: str = Form(None), message: str = Form(...)):
     sid = session or uuid.uuid4().hex
     ctrl = _get_controller(sid)
     try:
-        replies = ctrl.handle(message)
+        # log user message
+        try:
+            core.logger.log_interaction(sid, role="user", message=message)
+        except Exception:
+            pass
+        replies = ctrl.handle(message, session_id=sid)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat error: {e}")
+    # log bot replies with optional sources from QA
+    try:
+        sources = getattr(ctrl.qa_service, "last_sources", None)
+        keywords = getattr(ctrl.qa_service, "last_keywords", None)
+        for r in replies or []:
+            core.logger.log_interaction(sid, role="bot", message=str(r), sources=sources, keywords=keywords)
+    except Exception:
+        pass
     return {"session": sid, "responses": replies or []}

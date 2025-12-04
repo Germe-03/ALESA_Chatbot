@@ -36,6 +36,7 @@ class AppController:
         rma_flow: RMAFlow | None = None,
         rma_repo: RMARepo | None = None,
         rma_service: RMAService | None = None,
+        logger: any | None = None,
     ) -> None:
         self.qa_service = qa_service
         self.order_flow = order_flow
@@ -46,6 +47,7 @@ class AppController:
         self.rma_flow = rma_flow or RMAFlow()
         self.rma_repo = rma_repo
         self.rma_service = rma_service
+        self.logger = logger
         # bind persistence callback
         try:
             self.rma_flow._on_submit = self.persist_rma  # type: ignore[attr-defined]
@@ -61,7 +63,7 @@ class AppController:
         """Optionaler Initialtext (hier leer, da Banner bereits UI-seitig gezeigt wird)."""
         return None
 
-    def handle(self, user_text: str) -> List[str]:
+    def handle(self, user_text: str, session_id: str | None = None) -> List[str]:
         """
         Zentraler Dispatcher: nimmt eine Nutzereingabe entgegen
         und gibt eine Liste von Bot-Antworten zurück.
@@ -98,7 +100,10 @@ class AppController:
                 if self.orders_repo is not None and prev_phase == "confirm" and (q or "").strip().lower().startswith("ja") and not self.order_flow.is_active():
                     payload = self._order_payload()
                     if payload and self.order_service is not None:
-                        self.order_service.persist_and_notify(payload)
+                        oid = self.order_service.persist_and_notify(payload)
+                        if self.logger is not None and session_id and oid:
+                            items = payload.get("items", [])
+                            self.logger.log_order(session_id, order_id=oid, payload=payload, items=items)
             except Exception:
                 pass
             responses.append(reply)

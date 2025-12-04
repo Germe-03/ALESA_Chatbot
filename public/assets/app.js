@@ -93,13 +93,18 @@ function init(){
 
   // Enter zum Senden, Shift+Enter = Zeilenumbruch; ignoriert IME-Komposition
   const handleEnter = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){
+    if (e.key === 'Enter' && !e.shiftKey && !(e.isComposing === true)){
       e.preventDefault();
       submit();
     }
   };
   ta.addEventListener('keydown', handleEnter);
-  ta.addEventListener('keyup', handleEnter); // Fallback, falls keydown unterdrückt wird
+  // Fallback: global listener, falls keydown auf dem textarea nicht feuert
+  window.addEventListener('keydown', (e) => {
+    if (document.activeElement === ta) {
+      handleEnter(e);
+    }
+  });
 }
 
 window.addEventListener('DOMContentLoaded', init);

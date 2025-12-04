@@ -30,7 +30,7 @@ class ControllerPort(Protocol):
         """Optionaler Initialtext des Bots (z. B. Hinweise)."""
         ...
 
-    def handle(self, user_text: str) -> List[str]:
+    def handle(self, user_text: str, session_id: str | None = None) -> List[str]:
         """
         Verarbeitet eine Nutzereingabe und liefert 0..n Bot-Nachrichten zurück,
         die der Runner über die UI ausgibt.
@@ -74,7 +74,7 @@ def run_loop(controller: ControllerPort, ui: UiPort) -> None:
 
         # Leere Eingaben erlauben: Controller entscheidet, ob/was passiert
         try:
-            responses = controller.handle(user_text)
+            responses = controller.handle(user_text, session_id="cli")
         except Exception as e:
             ui.show_error(f"Unerwarteter Fehler: {e}")
             continue

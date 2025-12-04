@@ -32,6 +32,8 @@ class QAService:
         self.last_product: Optional[ProductRow] = None
         # remembers Sprache der letzten Anfrage (z. B. fuer UI oder Tests)
         self.last_lang: str = "de"
+        self.last_sources: List[str] = []
+        self.last_keywords: List[str] = []
         self._log = logging.getLogger(__name__)
 
     # -------- interne Helfer --------
@@ -58,6 +60,8 @@ class QAService:
     # -------- oeffentliche API --------
 
     def ask(self, question: str) -> Tuple[str, List[str]]:
+        self.last_sources = []
+        self.last_keywords = []
         self.last_product = None
         lang_guess: LangGuess = LangGuess(code="de", confidence=1.0)
         retrieval_question = question
@@ -133,6 +137,8 @@ class QAService:
                     if cite.strip():
                         cites_set.add(cite.strip())
                 cites = list(cites_set)
+                self.last_sources = cites
+                self.last_keywords = [p.code_norm for p in prs if getattr(p, "code_norm", None)]
 
                 if _has_order_intent(question):
                     answer = answer + "\n\nMoechten Sie dieses Produkt bestellen? (Antwort: 'ja' oder 'bestellen')"
@@ -172,6 +178,8 @@ class QAService:
                             lines.append("| " + " | ".join(getter(p) or "-" for _, getter in active_cols) + " |")
                     answer = "\n".join(lines)
                     cites: List[str] = []
+                    self.last_sources = cites
+                    self.last_keywords = [p.code_norm for p in prs if getattr(p, "code_norm", None)]
                     return self._translate_out(answer, lang_guess.code), cites
                 else:
                     msg = "Keine Artikel gefunden für Filter: " + ", ".join(f"{k}={v}" for k, v in filters.items())
@@ -188,6 +196,8 @@ class QAService:
             answer = (self.llm.generate(prompt) or "").strip()
             cites = [f"[{i+1}] {h.path}{(' S. ' + str(h.page)) if h.page else ''}" for i, h in enumerate(hits)]
             answer = answer if answer else "Dafuer habe ich in den Dateien keine Quelle gefunden."
+            self.last_sources = cites
+            self.last_keywords = [h.path for h in hits if getattr(h, "path", None)]
             return self._translate_out(answer, lang_guess.code), cites
 
         # Fallback: generative Antwort ohne Quellen
@@ -197,6 +207,8 @@ class QAService:
         self.llm.start()
         answer = (self.llm.generate(prompt) or "").strip()
         answer = answer if answer else "Keine passenden Quellen gefunden, daher generative Antwort ohne Belege."
+        self.last_sources = []
+        self.last_keywords = []
         return self._translate_out(answer, lang_guess.code), []
 
 

@@ -21,6 +21,7 @@ from src.alesa_bot.services.rma_service import RMAService
 from src.alesa_bot.assistant.preorder_gate import PreOrderGate
 from src.alesa_bot.runtime.controller import AppController
 from src.alesa_bot.services.language import LanguageHelper
+from src.alesa_bot.services.chat_logger import ChatLogger
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class CoreContext:
     prod_store: ProductTableStore
     orders_repo: OrderRepo
     rma_repo: RMARepo
+    logger: ChatLogger
     order_service: OrderService | None = None
     rma_service: RMAService | None = None
 
@@ -119,7 +121,8 @@ def build_core() -> CoreContext:
     rma_repo = RMARepo(root=cfg.paths.data_root / "orders")
     order_service = OrderService(orders_repo)
     rma_service = RMAService(rma_repo)
-    return CoreContext(cfg, indexer, encoder, retriever, llm, lang_helper, prod_store, orders_repo, rma_repo, order_service, rma_service)
+    logger = ChatLogger(db_path=cfg.paths.data_root / "logs" / "chat.db")
+    return CoreContext(cfg, indexer, encoder, retriever, llm, lang_helper, prod_store, orders_repo, rma_repo, logger, order_service, rma_service)
 
 
 def new_controller(core: CoreContext) -> AppController:
@@ -140,6 +143,7 @@ def new_controller(core: CoreContext) -> AppController:
         rma_flow=RMAFlow(),
         rma_repo=core.rma_repo,
         rma_service=core.rma_service,
+        logger=core.logger,
         system_banner=banner_text(),
     )
 
