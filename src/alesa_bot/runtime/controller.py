@@ -54,6 +54,8 @@ class AppController:
         except Exception:
             pass
         self._await_order_confirm = False
+        # QA-Modus je Session (default/complaint); bleibt bis Session-Ende
+        self.qa_mode: str = ""
 
     # ----------------------------------------------------
     # Öffentliche Schnittstelle (vom Runner genutzt)
@@ -197,9 +199,19 @@ class AppController:
             responses.append(answer)
             return responses
 
+        # QA-Modus aus der Session in den Service tragen, damit er pro Konversation stabil bleibt
+        try:
+            setattr(self.qa_service, "conversation_mode", self.qa_mode)
+        except Exception:
+            pass
         try:
             answer, cites = self.qa_service.ask(q)
         except ValueError as ve:
+            # Im Reklamationsmodus keinen generischen Fallback senden, sondern im Dialog bleiben
+            mode = getattr(self.qa_service, "conversation_mode", "") or self.qa_mode
+            if mode == "complaint":
+                responses.append("Ich helfe dir weiter mit der Reklamation. Was genau fehlt oder ist defekt?")
+                return responses
             responses.append(str(ve))
             return responses
         except Exception as e:
@@ -210,6 +222,11 @@ class AppController:
         responses.append(answer)
         if cites:
             responses.append("Quellen:\n" + "\n".join(cites))
+        # Sessionlokalen QA-Modus merken (default/complaint), damit Folge-Nachrichten im gleichen Modus bleiben
+        try:
+            self.qa_mode = getattr(self.qa_service, "conversation_mode", "") or self.qa_mode
+        except Exception:
+            pass
         # Mark that we await order confirmation if the last QA was a product hit
         try:
             if getattr(self.qa_service, "last_product", None) is not None and not self.order_flow.is_active():

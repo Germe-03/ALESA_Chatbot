@@ -12,6 +12,7 @@ from src.alesa_bot.services.order_repo import OrderRecord
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.runtime.controller import AppController
 from src.alesa_bot.analytics.query_clustering import build_clusters_cache, get_cached_clusters
+from uuid import uuid4
 
 # ------------------------------------------------------------
 # App & CORS Setup
@@ -51,6 +52,8 @@ clusters_snapshot = build_clusters_cache()
 # Session controllers for full dialog (incl. orders)
 # ------------------------------------------------------------
 SESSIONS: dict[str, AppController] = {}
+# Seed per Server-Start, um Chat-Session-IDs nach Restart neu zu machen
+SERVER_SEED = uuid4().hex[:8]
 
 def _new_controller() -> AppController:
     return new_controller(core)
@@ -160,7 +163,9 @@ def list_clusters(n_clusters: int = 8):
 # ------------------------------------------------------------
 @app.post("/chat")
 def chat(session: str = Form(None), message: str = Form(...)):
-    sid = session or uuid.uuid4().hex
+    sid_raw = session or uuid.uuid4().hex
+    # Prefix mit SERVER_SEED erzwingt neue Chat-ID pro Server-Start, auch wenn der Client die gleiche Basis-ID sendet
+    sid = f"{SERVER_SEED}-{sid_raw}"
     ctrl = _get_controller(sid)
     try:
         # log user message

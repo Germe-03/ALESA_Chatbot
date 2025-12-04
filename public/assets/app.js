@@ -29,10 +29,31 @@ function escapeHtml(s){
    .replaceAll('>','&gt;');
 }
 
+let CURRENT_SESSION = null;
+
+function newSessionId(){
+  return (self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
+}
+
 function getSession(){
-  let sid = localStorage.getItem('alesa_sid');
-  if (!sid){ sid = (self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)); localStorage.setItem('alesa_sid', sid); }
-  return sid;
+  // Sitzung nur im Speicher halten: neuer Tab/Reload => neue Session
+  if (!CURRENT_SESSION){
+    CURRENT_SESSION = newSessionId();
+  }
+  return CURRENT_SESSION;
+}
+
+function resetSessionUI(){
+  CURRENT_SESSION = newSessionId();
+  const chat = el('#chat');
+  chat.innerHTML = '';
+  const hello = createMsg({role:'bot', text:
+    'Neue Session gestartet.\n' +
+    'Stell mir eine Frage zu Produkten, Services oder Dokumenten – ich antworte mit Quellen.'
+  });
+  chat.appendChild(hello);
+  const ta = el('#q');
+  if (ta){ ta.value = ''; ta.focus(); }
 }
 
 async function ask(question){
@@ -60,6 +81,7 @@ function init(){
   const chat = el('#chat');
   const ta = el('#q');
   const btn = el('#send');
+  const newBtn = el('#new-session');
 
   const hello = createMsg({role:'bot', text:
     'Hallo! Ich bin ALESA, dein virtueller KI‑Assistent.\n' +
@@ -90,6 +112,7 @@ function init(){
   }
 
   btn.addEventListener('click', submit);
+  if (newBtn){ newBtn.addEventListener('click', resetSessionUI); }
 
   // Enter zum Senden, Shift+Enter = Zeilenumbruch; ignoriert IME-Komposition
   const handleEnter = (e) => {
