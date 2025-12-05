@@ -58,7 +58,7 @@ def _build_index_and_tables(cfg) -> tuple[FileIndexer, ProductTableStore]:
             if d.exists():
                 csv_files.extend([p for p in d.rglob("*.csv")])
         prod_store.ingest_csv(csv_files)
-        # Erst strukturierte PDFâ€‘Tabellen (genauer), dann Textâ€‘Heuristik als Fallback
+        # Erst strukturierte PDF‑Tabellen (genauer), dann Text‑Heuristik als Fallback
         pdfs: list[Path] = []
         for root in [cfg.paths.data_processed_raw, cfg.paths.data_processed, cfg.paths.data_root]:
             if root and Path(root).exists():
@@ -148,27 +148,25 @@ def new_controller(core: CoreContext) -> AppController:
     )
 
 
-
 def banner_text() -> str:
     return (
         "===" + " ALESA Chatbot ".center(50, "=") + "===\n"
-        "Guten Tag! Ich bin ALESA, Ihr virtueller KI-Assistent.\n"
-        "Ich unterstuetze Sie bei allgemeinen Fragen und Produktempfehlungen\n"
-        "und - wenn Sie moechten - auch direkt beim Bestellen.\n"
-        'Schreiben Sie z. B. "Ich wuerde gerne bestellen", um den Bestell-Assistenten zu starten.\n\n'
-        "Tippen Sie Ihre Nachricht und druecken Sie [Enter].\n"
-        'Mit "exit", "quit" oder "stop" beenden Sie den Chat.\n'
+        "👋 Guten Tag! Ich bin ALESA, Ihr virtueller KI‑Assistent.\n"
+        "Ich unterstütze Sie bei allgemeinen Fragen und Produktempfehlungen\n"
+        "und — wenn Sie möchten — auch direkt beim Bestellen.\n"
+        "Schreiben Sie z. B. ‘Ich würde gerne bestellen’, um den Bestell‑Assistenten zu starten.\n\n"
+        "Tippen Sie Ihre Nachricht und drücken Sie [Enter].\n"
+        "Mit 'exit', 'quit' oder 'stop' beenden Sie den Chat.\n"
     )
 
-
 def banner_text_reinhard() -> str:
-    """Banner mit neuem Namen/Rebranding (Reinhard als ALESA KI-Assistent)."""
+    " Banner mit neuem Namen/Rebranding.
     return (
-        "===" + " Reinhard - ALESA KI-Assistent ".center(50, "=") + "===\n"
-        "Guten Tag! Ich bin Reinhard, der KI-Assistent der Firma ALESA.\n"
-        "Ich unterstuetze Sie bei allgemeinen Fragen, Produktempfehlungen\n"
-        "und - wenn Sie moechten - auch direkt beim Bestellen.\n"
-        'Schreiben Sie z. B. "Ich wuerde gerne bestellen", um den Bestell-Assistenten zu starten.\n\n'
-        "Tippen Sie Ihre Nachricht und druecken Sie [Enter].\n"
-        'Mit "exit", "quit" oder "stop" beenden Sie den Chat.\n'
+        === +  Reinhard � ALESA KI-Assistent .center(50,  =) + ===\n
+ Guten Tag! Ich bin Reinhard der KI-Assistent der Firma ALESA.\n
+ Ich unterstuetze Sie bei allgemeinen Fragen Produktempfehlungen\n
+ und � wenn Sie moechten � auch direkt beim Bestellen.\n
+ Schreiben Sie z. B. \Ich wuerde gerne bestellen" um den Bestell-Assistenten zu starten.\n\n
+        Tippen Sie Ihre Nachricht und druecken Sie [Enter].\n
+        Mit exit quit oder stop beenden Sie den Chat.\n
     )
