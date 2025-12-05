@@ -84,7 +84,7 @@ function init(){
   const newBtn = el('#new-session');
 
   const hello = createMsg({role:'bot', text:
-    'Hallo! Ich bin ALESA, dein virtueller KI‑Assistent.\n' +
+    'Hallo! Ich bin Reinhard, der KI-Assistent der Firma ALESA.\n' +
     'Stell mir eine Frage zu Produkten, Services oder Dokumenten – ich antworte mit Quellen.'
   });
   chat.appendChild(hello);

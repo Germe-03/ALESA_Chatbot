@@ -12,6 +12,8 @@ from src.alesa_bot.services.order_repo import OrderRecord
 from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.runtime.controller import AppController
 from src.alesa_bot.analytics.query_clustering import build_clusters_cache, get_cached_clusters
+from src.alesa_bot.analytics.analytics_ml import build_admin_ml_overview
+from export_to_csv import export_logs_db_to_csv, ensure_placeholder_csvs
 from uuid import uuid4
 
 # ------------------------------------------------------------
@@ -156,6 +158,25 @@ def list_clusters(n_clusters: int = 8):
         return get_cached_clusters(n_clusters=n_clusters)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Clustering failed: {e}")
+
+
+@app.get("/admin/ml")
+def admin_ml(
+    logs_path: str = "data/logs.csv",
+    docs_path: str = "data/documents.csv",
+    products_path: str = "data/products.csv",
+):
+    """Liefert ML/Analytics-Übersicht (Cluster/Trends) für den Adminbereich."""
+    try:
+        # Falls CSVs fehlen, automatisch aus der SQLite-DB exportieren und Platzhalter anlegen
+        export_logs_db_to_csv(db_path="data/logs/chat.db", csv_path=logs_path)
+        ensure_placeholder_csvs(docs_path=docs_path, products_path=products_path)
+        overview = build_admin_ml_overview(logs_path=logs_path, docs_path=docs_path, products_path=products_path)
+        return overview
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=400, detail=f"File not found: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {e}")
 
 
 # ------------------------------------------------------------

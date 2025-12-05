@@ -144,7 +144,7 @@ def new_controller(core: CoreContext) -> AppController:
         rma_repo=core.rma_repo,
         rma_service=core.rma_service,
         logger=core.logger,
-        system_banner=banner_text(),
+        system_banner=banner_text_reinhard(),
     )
 
 
@@ -157,4 +157,16 @@ def banner_text() -> str:
         "Schreiben Sie z. B. ‘Ich würde gerne bestellen’, um den Bestell‑Assistenten zu starten.\n\n"
         "Tippen Sie Ihre Nachricht und drücken Sie [Enter].\n"
         "Mit 'exit', 'quit' oder 'stop' beenden Sie den Chat.\n"
+    )
+
+def banner_text_reinhard() -> str:
+    " Banner mit neuem Namen/Rebranding.
+    return (
+        === +  Reinhard � ALESA KI-Assistent .center(50,  =) + ===\n
+ Guten Tag! Ich bin Reinhard der KI-Assistent der Firma ALESA.\n
+ Ich unterstuetze Sie bei allgemeinen Fragen Produktempfehlungen\n
+ und � wenn Sie moechten � auch direkt beim Bestellen.\n
+ Schreiben Sie z. B. \Ich wuerde gerne bestellen" um den Bestell-Assistenten zu starten.\n\n
+        Tippen Sie Ihre Nachricht und druecken Sie [Enter].\n
+        Mit exit quit oder stop beenden Sie den Chat.\n
     )
