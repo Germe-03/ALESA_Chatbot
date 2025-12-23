@@ -1,4 +1,4 @@
-# src/alesa_bot/services/qa_service.py
+﻿# src/alesa_bot/services/qa_service.py
 from __future__ import annotations
 
 import logging
@@ -13,63 +13,53 @@ from src.alesa_bot.services.language import LangGuess, LanguageHelper
 
 # ---- System-Prompts (Basis + Reklamationsmodus) ----
 BASE_SYSTEM_PROMPT = """
-Hallo! Ich bin ALESA, dein virtueller KI-Assistent.
+Du bist ALESA, der virtuelle Assistent fuer Produkte, Services und Dokumente von ALESA (Schweizer Saegewerke AG).
 
-Stell mir eine Frage zu Produkten, Services oder Dokumenten – ich antworte mit Quellen.
+Zweck:
+- Beantworte Nutzerfragen praezise und freundlich in der Sprache der Frage (Standard: Deutsch).
+- Nutze ausschliesslich die gelieferten Snippets/Sources; keine Spekulation oder Halluzination.
+- Gib Quellen als [1], [2], ... an. Wenn keine Quelle vorhanden ist, erklaere das offen und bitte ggf. um Praezisierung.
+- Fasse dich kurz, nutze Aufzaehlungen bei mehreren Punkten, erklaere Fachbegriffe in Alltagssprache.
+
+Arbeitsweise:
+- Kombiniere relevante Snippets, entferne Redundanz, aber behalte wichtige Zahlen, Masse und Produktcodes.
+- Wenn etwas unklar bleibt, stelle eine kurze Rueckfrage statt zu raten.
+- Keine allgemeinen Aufzaehlungen aus AGB oder Handbuechern; nur Inhalte, die zur Frage passen.
+- Wenn die Anfrage ausserhalb des Themenbereichs liegt, erklaere freundlich den Fokus auf ALESA-Themen.
+
+Integriertes Reklamationsprotokoll (aktivieren, wenn Nachricht nach Reklamation/Schaden klingt oder der Reklamationsmodus gesetzt ist):
+1) Starte mit kurzer Entschuldigung und Empathie, Beleidigungen ignorieren.
+2) Fuehre einen Frage-Antwort-Dialog und sammle schrittweise:
+   - Lieferdatum
+   - Bestellte Produkte/Artikel mit Mengen
+   - Was fehlt/ist defekt (mit Mengenabweichungen)
+   - Referenznummern (AB, Bestellung, Lieferschein/LS; alle als gueltig akzeptieren)
+   - Name der Kontaktperson
+   - Telefonnummer
+   - Gewuenschtes Zeitfenster fuer Rueckruf
+   - Optional: Hinweis auf Fotos vom Schaden
+3) Pro Nutzerantwort genau eine neue Frage stellen; nichts doppelt fragen; kurze Antworten als Fortschritt akzeptieren.
+4) Pruefe knapp, ob Reklamationsfrist (z. B. 8 Tage ab Zustellung) abgelaufen sein koennte; auch dann weiterhin hilfsbereit, Daten aufnehmen und Weiterleitung anbieten.
+5) Keine Versprechen oder finalen Zusagen (kein "ich erstatte", "ich liefere nach"); du sammelst nur Informationen und leitest intern weiter.
+6) Bleibe im Chat, nenne Kontaktwege nur ergaenzend am Ende.
+7) Abschluss: Alle gesammelten Daten in Stichpunkten zusammenfassen, fuer den Hinweis danken, bestaetigen, dass der Fall intern geprueft und jemand sich meldet.
 """
 
 COMPLAINT_SYSTEM_PROMPT = """
-Du bist im Modus 'Reklamationsassistent' für ALESA.
+Du bist im Reklamationsmodus.
 
-Allgemein:
-- Bleib immer höflich, ruhig und professionell, auch wenn der Nutzer wütend oder beleidigend ist.
-- Ignoriere Beleidigungen und spiegle sie NICHT zurück.
-- Erkläre Regeln (z.B. AGB) in einfacher Alltagssprache und nur so ausführlich wie nötig.
-- Gib NIEMALS eine finale Lösung oder Zusage (kein „ich liefere nach“, „ich erstatte“); du sammelst nur Infos und leitest weiter.
-
-Ziel in diesem Modus:
-- Du sollst im Chat alle wichtigen Informationen für eine Reklamation einsammeln.
-- Du führst dazu einen kurzen Frage-Antwort-Dialog.
-- Du bleibst IM CHAT, anstatt den Nutzer direkt wegzuschicken.
-
-Sammle schrittweise folgende Informationen:
-1. Datum, an dem die Ware beim Kunden angekommen ist.
-2. Was wurde bestellt? (Produkt / Artikel / Menge)
-3. Was genau ist defekt oder fehlt? (inkl. Mengen, z.B. "10 bestellt, 9 angekommen").
-4. AB- oder Lieferscheinnummer (falls vorhanden).
-5. Name der Kontaktperson.
-6. Telefonnummer.
-7. Eine Zeit oder Zeitspanne, wann wir zurückrufen können.
-
-Wichtiger Ablauf:
-- Stelle pro Antwort des Nutzers nur EINE neue Frage.
-- Stelle KEINE Fragen doppelt, wenn die Information bereits genannt wurde.
-- Wenn der Nutzer kurz antwortet („heute“, „02.12.2025 LS452415“, „10 bestellt 9 angekommen“), interpretiere das als Antwort auf deine letzte Frage und gehe zur nächsten Frage über.
-- Zitiere AGB nur kurz und nur, wenn es dem Nutzer hilft (z.B. Reklamationsfrist), aber mache keine lange Liste daraus.
-- Prüfe, ob eine Reklamation formal noch zulässig wäre (z.B. Frist 8 Tage ab Zustellung). Wenn die Frist unklar ist: nachfragen. Wenn sie abgelaufen ist: freundlich erklären und nur Kontaktwege nennen.
-
-Am Ende, wenn du alle wichtigen Informationen hast (oder der Nutzer keine weiteren Angaben machen möchte):
-- Fasse alle Daten der Reklamation übersichtlich in Stichpunkten zusammen.
-- Sage, dass du die Reklamation intern weiterleitest und dass sich jemand bei ihm meldet.
-- Erst am Ende kannst du optional Kontaktmöglichkeiten nennen (Telefon/E-Mail), aber nicht als Hauptlösung, sondern ergänzend.
-
-Wenn du nach einer Bestell- oder Lieferscheinnummer fragst und der Nutzer stattdessen eine AB-Nummer, LS-Nummer oder ähnliche Referenz angibt (z.B. "AB Nummer VKA421521", "AB VKA...", "LS 123456"), dann:
-- akzeptiere diese Nummer als gültige Referenz,
-- bedanke dich kurz dafür,
-- und stelle direkt die nächste notwendige Frage im Reklamationsdialog (z.B. "Was wurde bestellt und was genau fehlt?" oder "Wie viele Stück wurden bestellt und wie viele sind angekommen?").
-
-Antworten wie "Da du keine spezifische Frage gestellt hast..." oder lange allgemeine Aufzählungen aus den AGB sind im Reklamationsmodus NICHT erlaubt.
-Im Reklamationsmodus gilt:
-- Bleib im Frage-Antwort-Dialog, bis du alle nötigen Infos hast (Ankunftsdatum, was bestellt / was fehlt, Mengen, Referenznummern, Name, Telefonnummer, Rückrufzeit).
-- Verwende Informationen aus den AGB nur kurz und gezielt (z.B. Frist: "innerhalb von 8 Tagen"), aber mache keine lange Liste mit vielen Punkten.
+- Folge strikt dem integrierten Reklamationsprotokoll aus dem Basis-Prompt.
+- Fokus auf Dialog statt langer RAG-Ausgaben oder AGB-Listen; eine Frage pro Antwort, keine Dopplungen.
+- Akzeptiere AB-, LS-, Bestell- oder Lieferscheinnummern als Referenzen und gehe direkt zur naechsten fehlenden Information.
+- Wenn Frist vermutlich abgelaufen: kurz erklaeren, trotzdem Daten aufnehmen und Weiterleitung anbieten.
+- Abschluss: kompakte Stichpunkte mit allen Angaben, Hinweis auf interne Weiterleitung und Rueckmeldung.
 """
 
 # Profile: erweiterbar um weitere Modi
 PROMPT_PROFILES: dict[str, list[str]] = {
-    "default": [BASE_SYSTEM_PROMPT],
-    "complaint": [BASE_SYSTEM_PROMPT, COMPLAINT_SYSTEM_PROMPT],
+    "default": [],
+    "complaint": [COMPLAINT_SYSTEM_PROMPT],
 }
-
 
 class QAService:
     def __init__(
@@ -94,11 +84,12 @@ class QAService:
         self.last_sources: List[str] = []
         self.last_keywords: List[str] = []
         self._log = logging.getLogger(__name__)
+        self.history: List[Tuple[str, str]] = []
         self._empathy_instruction = (
             "Reagiere immer freundlich und empathisch, insbesondere bei Reklamationen "
-            "oder verärgerten Nachrichten. Erkläre Regeln (z. B. AGB, Garantie, Fristen) "
-            "in verständlicher Alltagssprache und biete konkrete nächste Schritte an. "
-            "Ignoriere Beleidigungen und spiegele sie nicht zurück."
+            "oder verÃ¤rgerten Nachrichten. ErklÃ¤re Regeln (z. B. AGB, Garantie, Fristen) "
+            "in verstÃ¤ndlicher Alltagssprache und biete konkrete nÃ¤chste Schritte an. "
+            "Ignoriere Beleidigungen und spiegele sie nicht zurÃ¼ck."
         )
 
         # ASCII-freundliche Variante, falls Encoding der obigen Zeilen fehlschlaegt
@@ -132,6 +123,17 @@ class QAService:
             return answer
         return self.lang_helper.render_answer(answer, target_lang)
 
+    def _record_turn(self, user_msg: str, assistant_msg: str) -> None:
+        """Merkt sich den bisherigen Chatverlauf (gekuerzt)."""
+        try:
+            self.history.append(("user", user_msg))
+            self.history.append(("assistant", assistant_msg))
+            if len(self.history) > 20:
+                self.history = self.history[-20:]
+        except Exception:
+            if self._log:
+                self._log.debug("Konnte Chat-Historie nicht speichern", exc_info=True)
+
     # -------- oeffentliche API --------
 
     def ask(self, question: str) -> Tuple[str, List[str]]:
@@ -143,10 +145,16 @@ class QAService:
         is_complaint = (mode == "complaint") or is_complaint_or_angry(question)
         lang_guess: LangGuess = LangGuess(code="de", confidence=1.0)
         retrieval_question = question
+        history_context = self.history[-12:]
 
         if self.lang_helper:
             lang_guess, retrieval_question = self.lang_helper.prepare_query(question)
         self.last_lang = lang_guess.code
+
+        def _finish(ans: str, cites: List[str]) -> Tuple[str, List[str]]:
+            final = self._translate_out(ans, lang_guess.code)
+            self._record_turn(question, final)
+            return final, cites
 
         # 0) Article-number fast path with structured table lookup
         if self.product_store is not None and ARTICLE_RX.search(question or ""):
@@ -194,7 +202,7 @@ class QAService:
                             active_cols.append((label, getter))
                     if not active_cols:
                         continue
-                    # dynamischer Headername für Aufnahme: original CSV-Label falls vorhanden
+                    # dynamischer Headername fÃ¼r Aufnahme: original CSV-Label falls vorhanden
                     def _label_for(col_label: str) -> str:
                         if col_label != "Aufnahme":
                             return col_label
@@ -221,7 +229,7 @@ class QAService:
                 if _has_order_intent(question):
                     answer = answer + "\n\nMoechten Sie dieses Produkt bestellen? (Antwort: 'ja' oder 'bestellen')"
 
-                return self._translate_out(answer, lang_guess.code), cites
+                return _finish(answer, cites)
 
         # 0b) Filter-basierte Produktsuche (z. B. "suche artikel mit d1: 40, b: 1.0, nuttiefe: 14.5")
         if self.product_store is not None:
@@ -258,10 +266,10 @@ class QAService:
                     cites: List[str] = []
                     self.last_sources = cites
                     self.last_keywords = [p.code_norm for p in prs if getattr(p, "code_norm", None)]
-                    return self._translate_out(answer, lang_guess.code), cites
+                    return _finish(answer, cites)
                 else:
-                    msg = "Keine Artikel gefunden für Filter: " + ", ".join(f"{k}={v}" for k, v in filters.items())
-                    return self._translate_out(msg, lang_guess.code), []
+                    msg = "Keine Artikel gefunden fÃ¼r Filter: " + ", ".join(f"{k}={v}" for k, v in filters.items())
+                    return _finish(msg, [])
 
         q = self._expand(retrieval_question)
         hits: List[Hit] = self.retriever.search(q, top_k=8)
@@ -273,7 +281,7 @@ class QAService:
         if has_sources:
             snippets = [h.snippet for h in hits]
             sys_prompts = build_system_prompts(base_prompt=self.system_prompt, mode=mode, empathy=self._empathy_instruction)
-            prompt = build_prompt("\n\n".join(sys_prompts), snippets, retrieval_question, user_lang=lang_guess.code)
+            prompt = build_prompt("\n\n".join(sys_prompts), snippets, retrieval_question, user_lang=lang_guess.code, history=history_context)
             self.llm.start()
             answer = (self.llm.generate(prompt) or "").strip()
             cites = [f"[{i+1}] {h.path}{(' S. ' + str(h.page)) if h.page else ''}" for i, h in enumerate(hits)]
@@ -287,13 +295,13 @@ class QAService:
                 )
             self.last_sources = cites
             self.last_keywords = [h.path for h in hits if getattr(h, "path", None)]
-            return self._translate_out(answer, lang_guess.code), cites
+            return _finish(answer, cites)
 
         # Fallback: generative Antwort ohne Quellen
         if self._log:
-            self._log.info("Keine Treffer aus Retrieval – Fallback auf generative Antwort ohne Quellen.")
+            self._log.info("Keine Treffer aus Retrieval â€“ Fallback auf generative Antwort ohne Quellen.")
         sys_prompts = build_system_prompts(base_prompt=self.system_prompt, mode=mode, empathy=self._empathy_instruction)
-        prompt = build_prompt("\n\n".join(sys_prompts), [], retrieval_question, user_lang=lang_guess.code)
+        prompt = build_prompt("\n\n".join(sys_prompts), [], retrieval_question, user_lang=lang_guess.code, history=history_context)
         self.llm.start()
         answer = (self.llm.generate(prompt) or "").strip()
         answer = answer if answer else "Keine passenden Quellen gefunden, daher generative Antwort ohne Belege."
@@ -306,7 +314,7 @@ class QAService:
             )
         self.last_sources = []
         self.last_keywords = []
-        return self._translate_out(answer, lang_guess.code), []
+        return _finish(answer, [])
 
 
 def _has_order_intent(text: str) -> bool:
@@ -348,12 +356,12 @@ def _parse_product_filters(text: str) -> dict:
         canon = key_map.get(raw_key)
         if not canon:
             continue
-        # Werte bereinigen: abschließende Kommas/Punkte/Anführungszeichen/Einheiten entfernen
+        # Werte bereinigen: abschlieÃŸende Kommas/Punkte/AnfÃ¼hrungszeichen/Einheiten entfernen
         val = raw_val.strip()
         val = val.rstrip(",.;")
         val = val.replace("mm", "").replace(" ", "")
         val = val.replace('"', '').replace("'", "")
-        # nur die führende Zahl/Range extrahieren (z. B. "32angeben?" -> "32")
+        # nur die fÃ¼hrende Zahl/Range extrahieren (z. B. "32angeben?" -> "32")
         m_num = re.match(r"[0-9][0-9.,]*", val)
         if m_num:
             val = m_num.group(0)
@@ -364,7 +372,7 @@ def _parse_product_filters(text: str) -> dict:
 
 
 def _clean_val(val: str) -> str:
-    """Trimmt Zellwerte und entfernt führende/abschließende Quotes sowie NULL."""
+    """Trimmt Zellwerte und entfernt fÃ¼hrende/abschlieÃŸende Quotes sowie NULL."""
     if val is None:
         return ""
     v = val.strip()
@@ -377,31 +385,7 @@ def _clean_val(val: str) -> str:
     return v
 
 
-# ------- Prompt-Profile & Moduserkennung -------
-# BASE_SYSTEM_PROMPT wird dynamisch aus self.system_prompt gespeist.
-COMPLAINT_SYSTEM_PROMPT = """
-Du bist im Modus 'Reklamationsassistent'.
-
-Wenn sich der Nutzer über defekte, unvollständige oder falsch gelieferte Ware beschwert
-(z.B. Wörter wie 'kaputt', 'defekt', 'unvollständig', 'falsch geliefert', 'Reklamation'):
-
-1. Reagiere zuerst freundlich und entschuldigend.
-2. Führe ein kurzes Frage-Antwort-Gespräch, um diese Infos zu sammeln:
-   - Datum, wann die Ware angekommen ist
-   - Was wurde bestellt und was fehlt / ist defekt (inkl. Mengen, z.B. '10 bestellt, 9 angekommen')
-   - AB-Nummer oder Lieferscheinnummer (falls vorhanden)
-   - Name, Telefonnummer und eine Zeitspanne für Rückruf
-3. Stelle pro Antwort des Nutzers nur EINE neue Frage und stelle nichts doppelt.
-4. Am Ende fasse alle Infos in Stichpunkten zusammen und sage, dass du die Reklamation weiterleitest.
-5. Bleib immer höflich, ignoriere Beleidigungen, zitiere AGB nur knapp in Alltagssprache.
-"""
-
-# Profile erlauben spaetere Erweiterungen (z. B. bestellung/beratung) durch einfaches Hinzufügen.
-PROMPT_PROFILES: dict[str, list[str]] = {
-    "default": [],  # Basis-Prompt wird dynamisch vorne angefügt
-    "complaint": [COMPLAINT_SYSTEM_PROMPT],
-}
-
+# ------- Moduserkennung -------
 
 def detect_mode(user_text: str) -> str:
     """
@@ -412,15 +396,15 @@ def detect_mode(user_text: str) -> str:
     complaint_terms = [
         "kaputt",
         "defekt",
-        "unvollständig",
+        "unvollstÃ¤ndig",
         "unvollstaendig",
         "reklamation",
         "falsch geliefert",
         "funktioniert nicht",
-        "beschädigt",
+        "beschÃ¤digt",
         "beschaedigt",
         "ware ist kaputt",
-        "ware ist unvollständig",
+        "ware ist unvollstÃ¤ndig",
     ]
     if any(t in low for t in complaint_terms):
         return "complaint"
@@ -437,7 +421,7 @@ def build_system_prompts(base_prompt: str, mode: str, empathy: str | None = None
     base = base_prompt or BASE_SYSTEM_PROMPT
     stack.append(base)
     profile_prompts = PROMPT_PROFILES.get(mode, PROMPT_PROFILES["default"])
-    # Profile enthalten bereits BASE_SYSTEM_PROMPT; nur zusätzliche Elemente anhängen
+    # Profile enthalten bereits BASE_SYSTEM_PROMPT; nur zusÃ¤tzliche Elemente anhÃ¤ngen
     for p in profile_prompts:
         if p != BASE_SYSTEM_PROMPT:  # vermeidet doppelte Basis
             stack.append(p)
@@ -448,7 +432,7 @@ def build_system_prompts(base_prompt: str, mode: str, empathy: str | None = None
 
 def is_complaint_or_angry(text: str) -> bool:
     """
-    Einfache Heuristik zur Erkennung von Reklamationen/Verärgerung.
+    Einfache Heuristik zur Erkennung von Reklamationen/VerÃ¤rgerung.
     Beleidigungen werden nur erkannt, nicht gespiegelt.
     """
     low = (text or "").lower()
@@ -457,17 +441,17 @@ def is_complaint_or_angry(text: str) -> bool:
         "defekt",
         "funktioniert nicht",
         "beschaedigt",
-        "beschädigt",
+        "beschÃ¤digt",
         "reklamation",
         "garantie",
         "gewaehrleistung",
-        "gewährleistung",
+        "gewÃ¤hrleistung",
         "retoure",
         "umtausch",
     ]
     negative_terms = [
         "scheisse",
-        "scheiße",
+        "scheiÃŸe",
         "schweine",
         "mies",
         "verarsche",
@@ -475,7 +459,7 @@ def is_complaint_or_angry(text: str) -> bool:
         "saftladen",
         "beschwerde",
         "aergerlich",
-        "ärgerlich",
+        "Ã¤rgerlich",
         "genervt",
     ]
     return any(t in low for t in complaint_terms + negative_terms)
@@ -495,25 +479,25 @@ def get_conversation_mode(conversation: "QAService", last_user_text: str) -> str
 
 def build_complaint_response(user_message: str, rag_answer: str, legal_snippets: List[str], sources: List[str]) -> str:
     """
-    Baut eine empathische, handlungsorientierte Antwort für Reklamationen.
-    Beleidigungen werden bewusst nicht zurückgespiegelt.
+    Baut eine empathische, handlungsorientierte Antwort fÃ¼r Reklamationen.
+    Beleidigungen werden bewusst nicht zurÃ¼ckgespiegelt.
     """
     lines: List[str] = []
-    lines.append("Es tut mir leid, dass deine Lieferung beschädigt oder defekt ist. Das ist ärgerlich.")
-    lines.append("Ich verstehe den Frust und helfe dir sofort, das zu klären.")
+    lines.append("Es tut mir leid, dass deine Lieferung beschÃ¤digt oder defekt ist. Das ist Ã¤rgerlich.")
+    lines.append("Ich verstehe den Frust und helfe dir sofort, das zu klÃ¤ren.")
 
     # Aus der RAG-Antwort oder Snippets kurze Hinweise ziehen
     bullet_candidates: List[str] = []
     for part in (rag_answer or "").splitlines():
-        p = part.strip().lstrip("-•").strip()
+        p = part.strip().lstrip("-â€¢").strip()
         if p:
             bullet_candidates.append(p)
     if not bullet_candidates:
         bullet_candidates = legal_snippets[:]
     if not bullet_candidates:
         bullet_candidates = [
-            "Reklamationen sind innerhalb der üblichen Frist (z. B. 8 Tage nach Erhalt) möglich.",
-            "Wir prüfen, ob Reparatur oder Ersatz sinnvoll ist.",
+            "Reklamationen sind innerhalb der Ã¼blichen Frist (z. B. 8 Tage nach Erhalt) mÃ¶glich.",
+            "Wir prÃ¼fen, ob Reparatur oder Ersatz sinnvoll ist.",
         ]
 
     lines.append("Kurz das Wichtigste:")

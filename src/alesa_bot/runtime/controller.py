@@ -12,22 +12,23 @@ Der Controller kennt keine Ein-/Ausgabe. Er liefert nur Text-Antworten
 """
 
 import re
+from datetime import datetime
 from typing import List
-from src.alesa_bot.services.order_flow import OrderFlow
-from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.assistant.preorder_gate import PreOrderGate
+from src.alesa_bot.services.order_flow import OrderFlow
 from src.alesa_bot.services.order_repo import OrderRepo
 from src.alesa_bot.services.order_service import OrderService
+from src.alesa_bot.services.qa_service import QAService
 from src.alesa_bot.services.rma_flow import RMAFlow
 from src.alesa_bot.services.rma_repo import RMARepo
 from src.alesa_bot.services.rma_service import RMAService
-from datetime import datetime
 
 
 class AppController:
     def __init__(
         self,
         qa_service: QAService,
+        manual_qa_service: QAService | None = None,
         order_flow: OrderFlow,
         pre_order_gate: PreOrderGate,
         system_banner: str = "",
@@ -39,6 +40,7 @@ class AppController:
         logger: any | None = None,
     ) -> None:
         self.qa_service = qa_service
+        self.manual_qa_service = manual_qa_service
         self.order_flow = order_flow
         self.pre_gate = pre_order_gate
         self.system_banner = system_banner
@@ -56,6 +58,7 @@ class AppController:
         self._await_order_confirm = False
         # QA-Modus je Session (default/complaint); bleibt bis Session-Ende
         self.qa_mode: str = ""
+        self.manual_mode: bool = False
 
     # ----------------------------------------------------
     # Öffentliche Schnittstelle (vom Runner genutzt)
@@ -74,6 +77,26 @@ class AppController:
 
         q = (user_text or "").strip()
         low = q.lower()
+
+        # Manuel-Modus aktivieren: nur wenn Feature vorhanden und Trigger exakt "manuel"
+        if not self.manual_mode and self.manual_qa_service is not None and low == "manuel":
+            self.manual_mode = True
+            responses.append("Du bist jetzt im Manuel-Modus. Ich beantworte nur Fragen zu deinem Bericht. Keine Bestellungen oder Reklamationen, keine Logs.")
+            return responses
+
+        # Im Manuel-Modus alles andere Ç¬berspringen, nur dediziertes QA
+        if self.manual_mode and self.manual_qa_service is not None:
+            if not q:
+                return []
+            try:
+                answer, cites = self.manual_qa_service.ask(q)
+            except Exception as e:
+                responses.append(f"Fehler im Manuel-Modus: {e}")
+                return responses
+            responses.append(answer)
+            if cites:
+                responses.append("Quellen:\n" + "\n".join(cites))
+            return responses
 
         # E-1) Klare Startsignale: direkt in den Bestell-Flow springen
         if not self.order_flow.is_active() and _is_direct_order_command(q):

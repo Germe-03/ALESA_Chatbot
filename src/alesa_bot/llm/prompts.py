@@ -1,9 +1,15 @@
 # src/alesa_bot/llm/prompts.py
 from __future__ import annotations
-from typing import List
+from typing import List, Optional, Tuple
 
 
-def build_prompt(system_prompt: str, snippets: List[str], question: str, user_lang: str = "de") -> str:
+def build_prompt(
+    system_prompt: str,
+    snippets: List[str],
+    question: str,
+    user_lang: str = "de",
+    history: Optional[List[Tuple[str, str]]] = None,
+) -> str:
     ctx = "\n\n---\n\n".join(snippets)
     lang_hint = "Alle Quelldokumente sind deutsch. Formuliere die Fachantwort auf Deutsch, sachlich und praezise."
     if user_lang and user_lang != "de":
@@ -21,7 +27,18 @@ def build_prompt(system_prompt: str, snippets: List[str], question: str, user_la
     )
     return (
         f"{guidance}\n\n"
+        f"{_format_history(history)}"
         f"AUSZUEGE BEGINN\n{ctx}\nAUSZUEGE ENDE\n\n"
         f"FRAGE: {question}\n"
         f"ANTWORT:"
     )
+
+
+def _format_history(history: Optional[List[Tuple[str, str]]]) -> str:
+    if not history:
+        return ""
+    lines = ["BISHERIGER CHAT (kurz, chronologisch):"]
+    for role, content in history:
+        prefix = "User" if role == "user" else "Assistant"
+        lines.append(f"{prefix}: {content}")
+    return "\n".join(lines) + "\n\n"

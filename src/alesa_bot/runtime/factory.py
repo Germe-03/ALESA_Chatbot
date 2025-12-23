@@ -30,6 +30,7 @@ class CoreContext:
     indexer: FileIndexer
     encoder: EmbeddingEncoder
     retriever: any
+    manual_retriever: any | None
     llm: VertexLLM
     lang_helper: LanguageHelper | None
     prod_store: ProductTableStore
@@ -102,6 +103,43 @@ def _build_retriever(cfg, indexer) -> tuple[EmbeddingEncoder, any]:
     return encoder, retriever
 
 
+def _build_manual_retriever(cfg, encoder) -> any | None:
+    """
+    Separater Retriever fÇ¬r den Manuel-Modus: nutzt nur data/reports/manuel
+    und einen eigenen Vektorstore. Gibt None zurÇ¬ck, falls kein Bericht hinterlegt ist.
+    """
+    manual_root = cfg.paths.data_root / "reports" / "manuel"
+    if not manual_root.exists():
+        return None
+
+    indexer = FileIndexer(
+        roots=[manual_root],
+        max_mb=cfg.retrieval.max_mb,
+        max_pdf_pages=cfg.retrieval.max_pdf_pages,
+    )
+    indexer.build()
+
+    try:
+        store = ChromaStore(cfg=VSConfig(root=cfg.paths.data_root / "vectorstore-manuel"), encoder=encoder)
+        store.build(indexer, size=800, overlap=200)
+
+        class _VSAdapter:
+            def search(self, query: str, top_k: int = 6):
+                return store.query(query, top_k=top_k)
+
+        base = _VSAdapter()
+    except Exception:
+        base = HybridRetriever(
+            indexer=indexer,
+            encoder=encoder,
+            time_limit_sec=cfg.retrieval.time_limit_sec,
+            chunk_size=800,
+            overlap=200,
+        )
+
+    return BoostedRetriever(indexer=indexer, base=base, time_limit_sec=cfg.retrieval.time_limit_sec)
+
+
 def _build_llm(cfg) -> VertexLLM:
     return VertexLLM(
         project=cfg.vertex.project,
@@ -115,6 +153,7 @@ def build_core() -> CoreContext:
     cfg = load_config()
     indexer, prod_store = _build_index_and_tables(cfg)
     encoder, retriever = _build_retriever(cfg, indexer)
+    manual_retriever = _build_manual_retriever(cfg, encoder)
     llm = _build_llm(cfg)
     lang_helper = LanguageHelper(llm)
     orders_repo = OrderRepo(root=cfg.paths.data_root / "orders")
@@ -122,7 +161,7 @@ def build_core() -> CoreContext:
     order_service = OrderService(orders_repo)
     rma_service = RMAService(rma_repo)
     logger = ChatLogger(db_path=cfg.paths.data_root / "logs" / "chat.db")
-    return CoreContext(cfg, indexer, encoder, retriever, llm, lang_helper, prod_store, orders_repo, rma_repo, logger, order_service, rma_service)
+    return CoreContext(cfg, indexer, encoder, retriever, manual_retriever, llm, lang_helper, prod_store, orders_repo, rma_repo, logger, order_service, rma_service)
 
 
 def new_controller(core: CoreContext) -> AppController:
@@ -134,8 +173,19 @@ def new_controller(core: CoreContext) -> AppController:
         lang_helper=core.lang_helper,
         product_store=core.prod_store,
     )
+    manual_qa = None
+    if core.manual_retriever is not None:
+        manual_qa = QAService(
+            retriever=core.manual_retriever,
+            llm=core.llm,
+            system_prompt="Du bist Manuel. Beantworte ausschlieÇYlich Fragen zu meinem Bericht anhand der bereitgestellten Quellen. Keine Bestellungen oder Reklamationen.",
+            query_expand=False,
+            product_store=None,
+            lang_helper=core.lang_helper,
+        )
     return AppController(
         qa_service=qa,
+        manual_qa_service=manual_qa,
         order_flow=OrderFlow(),
         pre_order_gate=PreOrderGate(),
         orders_repo=core.orders_repo,

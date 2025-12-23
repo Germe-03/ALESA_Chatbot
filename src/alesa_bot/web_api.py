@@ -54,6 +54,8 @@ clusters_snapshot = build_clusters_cache()
 # Session controllers for full dialog (incl. orders)
 # ------------------------------------------------------------
 SESSIONS: dict[str, AppController] = {}
+# Sessions, die im Manuel-Modus laufen (kein Logging, eigener Retriever)
+MANUAL_SESSIONS: set[str] = set()
 # Seed per Server-Start, um Chat-Session-IDs nach Restart neu zu machen
 SERVER_SEED = uuid4().hex[:8]
 
@@ -99,6 +101,14 @@ def home():
     if index_file.exists():
         return FileResponse(str(index_file))
     return {"detail": "Not Found", "hint": "Leg public/index.html an oder nutze /chat per API."}
+
+@app.get("/manuel")
+def manuel_home():
+    """Separate UI fÇ¬r den Manuel-Modus (nur Bericht-QA, kein Logging)."""
+    manual_index = PUBLIC_DIR / "manuel" / "index.html"
+    if manual_index.exists():
+        return FileResponse(str(manual_index))
+    return {"detail": "Not Found", "hint": "Leg public/manuel/index.html an."}
 
 
 # ------------------------------------------------------------
@@ -188,21 +198,28 @@ def chat(session: str = Form(None), message: str = Form(...)):
     # Prefix mit SERVER_SEED erzwingt neue Chat-ID pro Server-Start, auch wenn der Client die gleiche Basis-ID sendet
     sid = f"{SERVER_SEED}-{sid_raw}"
     ctrl = _get_controller(sid)
+    manual_flag = (message or "").strip().lower() == "manuel" or sid in MANUAL_SESSIONS
     try:
         # log user message
-        try:
-            core.logger.log_interaction(sid, role="user", message=message)
-        except Exception:
-            pass
+        if not manual_flag:
+            try:
+                core.logger.log_interaction(sid, role="user", message=message)
+            except Exception:
+                pass
         replies = ctrl.handle(message, session_id=sid)
+        # Falls der Controller den Manuel-Modus aktiviert hat, Session merken
+        if getattr(ctrl, "manual_mode", False):
+            manual_flag = True
+            MANUAL_SESSIONS.add(sid)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat error: {e}")
     # log bot replies with optional sources from QA
-    try:
-        sources = getattr(ctrl.qa_service, "last_sources", None)
-        keywords = getattr(ctrl.qa_service, "last_keywords", None)
-        for r in replies or []:
-            core.logger.log_interaction(sid, role="bot", message=str(r), sources=sources, keywords=keywords)
-    except Exception:
-        pass
+    if not manual_flag:
+        try:
+            sources = getattr(ctrl.qa_service, "last_sources", None)
+            keywords = getattr(ctrl.qa_service, "last_keywords", None)
+            for r in replies or []:
+                core.logger.log_interaction(sid, role="bot", message=str(r), sources=sources, keywords=keywords)
+        except Exception:
+            pass
     return {"session": sid, "responses": replies or []}

@@ -110,6 +110,7 @@
           </div>
           <div class="panel" style="margin-top:10px">
             <h3>Produkt-Trends</h3>
+            <div class="small muted">Forecast via Gradient Boosting (3-Perioden-Fenster, Fallback: letzter Wert).</div>
             <div id="analytics-prods"></div>
           </div>
         </section>
@@ -318,7 +319,7 @@
         prodsDiv.innerHTML = prodRows.map(p=>`
           <div class="small" style="margin-bottom:4px">
             <strong>${escapeHtml(p.name||p.product_id||'-')}</strong> (${escapeHtml(p.category||'')})<br>
-            Trend: ${escapeHtml(p.trend_label||'-')} (${Number(p.trend_slope||0).toFixed(3)}), Orders 30T: ${p.orders_last_30_days||0}, Forecast: ${p.forecast_next_period||0}
+            Trend: ${escapeHtml(p.trend_label||'-')} (${Number(p.trend_slope||0).toFixed(3)}), Orders 30T: ${p.orders_last_30_days||0}, Forecast (GB): ${p.forecast_next_period||0}
           </div>
         `).join('') || '<div class="small muted">Keine Produkt-Trends.</div>';
       }

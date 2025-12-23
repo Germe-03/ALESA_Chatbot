@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import timedelta
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
+from sklearn.ensemble import GradientBoostingRegressor
 
 
 # ------------------------------------------------------------
@@ -52,10 +53,10 @@ def preprocess_for_clustering(text: str) -> bool:
     if not text:
         return False
     t = text.strip()
-    if len(t) < 5:
+    if len(t) < 3:
         return False
     words = t.split()
-    if len(words) < 2:
+    if len(words) < 2 and len(t) < 10:
         return False
     low = t.lower()
     if low in SHORT_ANSWERS:
@@ -88,15 +89,24 @@ def cluster_queries(logs_df: pd.DataFrame, max_queries: int = 1000) -> Tuple[pd.
     logs_with_cluster = recent.copy()
     logs_with_cluster["cluster_id"] = -1
 
-    if len(texts) < 2:
+    if not texts:
         clusters_overview = pd.DataFrame(columns=["cluster_id", "count", "top_terms", "example_queries"])
         return logs_with_cluster, clusters_overview
 
+    # bei nur einem Text: einfacher Cluster 0
+    if len(texts) == 1:
+        idx = logs_with_cluster.index[mask_valid][0]
+        logs_with_cluster.at[idx, "cluster_id"] = 0
+        clusters_overview = pd.DataFrame(
+            [{"cluster_id": 0, "count": 1, "top_terms": [texts[0][:20]], "example_queries": [texts[0]]}]
+        )
+        return logs_with_cluster, clusters_overview
+
     stop_words = ["ist", "der", "die", "das", "ein", "eine", "und", "ich", "du", "wir", "ihr", "auch", "bitte"]
-    vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=2, max_features=5000, stop_words=stop_words)
+    vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=1, max_features=5000, stop_words=stop_words)
     X = vectorizer.fit_transform(texts)
 
-    k = min(8, max(2, int(len(texts) ** 0.5)))
+    k = min(8, max(1, int(len(texts) ** 0.5)))
     kmeans = KMeans(n_clusters=k, n_init="auto", random_state=42)
     labels = kmeans.fit_predict(X)
 
@@ -196,6 +206,41 @@ def top_trending_documents(doc_trends_df: pd.DataFrame, n: int = 10) -> tuple[pd
 # Produkt-Trends & einfache Prognose
 # ------------------------------------------------------------
 
+
+def forecast_next_period_gb(series: list[int] | list[float], periods_back: int = 3) -> int:
+    """
+    Prognostiziert den naechsten Wert einer Zeitreihe via Gradient Boosting.
+    Fallback: letzter Wert, wenn zu wenig Historie oder Trainingspunkte.
+    """
+    y = [float(v) for v in series if v is not None]
+    if not y:
+        return 0
+    # Mindestens ein paar Punkte pro Feature-Fenster
+    min_points = max(4, periods_back + 2)
+    if len(y) < min_points:
+        return int(y[-1])
+
+    X, target = [], []
+    for i in range(periods_back, len(y)):
+        window = y[i - periods_back : i]
+        if len(window) == periods_back:
+            X.append(window)
+            target.append(y[i])
+    if len(target) < 3:
+        return int(y[-1])
+
+    model = GradientBoostingRegressor(
+        random_state=42,
+        n_estimators=150,
+        max_depth=3,
+        learning_rate=0.05,
+    )
+    model.fit(X, target)
+
+    pred = model.predict([y[-periods_back:]])[0]
+    return max(0, int(round(pred)))
+
+
 def compute_product_trends(logs_df: pd.DataFrame, products_df: pd.DataFrame, freq: str = "W") -> pd.DataFrame:
     """Aggregiert Produkt-Nachfrage (Bestellungen) und schaetzt Trend + Forecast."""
     df = logs_df.copy()
@@ -217,9 +262,8 @@ def compute_product_trends(logs_df: pd.DataFrame, products_df: pd.DataFrame, fre
         slope = _trend_from_series(grp["orders"])
         total_orders = int(grp["orders"].sum())
         orders_30 = int(grp.loc[grp["period"] >= cutoff, "orders"].sum())
-        # Forecast: letzte Periode oder Steigung addieren
-        last_val = int(grp["orders"].iloc[-1])
-        forecast = max(0, int(round(last_val + slope)))
+        orders_series = grp["orders"].astype(float).tolist()
+        forecast = forecast_next_period_gb(orders_series, periods_back=3)
         rows.append(
             {
                 "product_id": pid,
