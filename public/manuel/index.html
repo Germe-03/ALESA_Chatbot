@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manuel-Modus – Bericht-QA</title>
+    <link rel="stylesheet" href="/assets/style.css" />
+    <style>
+      body { background:#f5f7fb; }
+      .page { max-width:960px; margin:0 auto; padding:32px 16px 96px; }
+      .card { background:#fff; border:1px solid var(--border,#e4e8f0); border-radius:14px; padding:18px; box-shadow:0 12px 30px rgba(17,38,146,.08); }
+      .messages { max-height:520px; overflow-y:auto; padding-right:6px; margin-bottom:12px; }
+      .msg { padding:10px 12px; border-radius:10px; margin-bottom:10px; white-space:pre-wrap; }
+      .msg.user { background:var(--primary-050,#eef4ff); color:#0b46a8; }
+      .msg.bot { background:#f8fafc; border:1px solid var(--border,#e4e8f0); }
+      .small { color:var(--muted,#667085); font-size:.9rem; }
+      .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:var(--primary-050,#eef4ff); color:var(--primary-700,#0b46a8); font-size:.8rem; }
+      .sources { margin-top:6px; font-size:.9rem; color:#475467; }
+      textarea { width:100%; resize:vertical; min-height:80px; padding:10px; border-radius:10px; border:1px solid var(--border,#e4e8f0); }
+      button { background:var(--primary,#0b6cff); color:#fff; border:none; padding:10px 16px; border-radius:10px; cursor:pointer; font-weight:700; }
+      button:disabled { opacity:.6; cursor:not-allowed; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <div style="font-weight:800; font-size:1.3rem;">Manuel-Modus</div>
+          <div class="small">Antworten nur zu deinem Bericht, ohne Logging.</div>
+        </div>
+        <span class="pill">Isolierter Vektorstore</span>
+      </div>
+
+      <div class="card">
+        <div class="small" id="status">Verbinde...</div>
+        <div class="messages" id="messages"></div>
+        <div>
+          <textarea id="input" placeholder="Frage zum Bericht eingeben..." autofocus></textarea>
+          <div style="margin-top:8px; display:flex; gap:10px; align-items:center;">
+            <button id="send">Senden</button>
+            <span class="small">Session: <span id="session-label">–</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const messagesEl = document.getElementById('messages');
+      const inputEl = document.getElementById('input');
+      const statusEl = document.getElementById('status');
+      const sessionLabel = document.getElementById('session-label');
+      const sendBtn = document.getElementById('send');
+
+      let sessionId = null;
+      let ready = false;
+
+      function addMsg(role, text) {
+        const div = document.createElement('div');
+        div.className = `msg ${role}`;
+        div.textContent = text;
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      async function callChat(message) {
+        const fd = new FormData();
+        if (sessionId) fd.append('session', sessionId);
+        fd.append('message', message);
+        const res = await fetch('/chat', { method:'POST', body:fd });
+        if (!res.ok) throw new Error('Chat-Request fehlgeschlagen');
+        return res.json();
+      }
+
+      async function startManual() {
+        // eigene Session mit Prefix, damit Backend automatisch Manuel-Modus setzt
+        sessionId = `manuel-${crypto.randomUUID()}`;
+        sessionLabel.textContent = sessionId || '–';
+        ready = true;
+        statusEl.textContent = 'Bereit. Antworten beziehen sich nur auf den Manuel-Bericht.';
+      }
+
+      async function sendUser() {
+        const text = (inputEl.value || '').trim();
+        if (!text || !ready) return;
+        inputEl.value = '';
+        addMsg('user', text);
+        sendBtn.disabled = true;
+        try {
+          const j = await callChat(text);
+          sessionId = j.session || sessionId;
+          sessionLabel.textContent = sessionId || '–';
+          (j.responses || []).forEach(r => addMsg('bot', r));
+        } catch (e) {
+          addMsg('bot', 'Fehler: ' + e.message);
+        } finally {
+          sendBtn.disabled = false;
+          inputEl.focus();
+        }
+      }
+
+      sendBtn.addEventListener('click', sendUser);
+      inputEl.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && !ev.shiftKey) {
+          ev.preventDefault();
+          sendUser();
+        }
+      });
+
+      startManual();
+    </script>
+  </body>
+</html>
