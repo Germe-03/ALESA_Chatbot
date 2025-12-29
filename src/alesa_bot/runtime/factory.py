@@ -226,7 +226,7 @@ def new_controller(core: CoreContext) -> AppController:
         manual_qa = QAService(
             retriever=core.manual_retriever,
             llm=core.llm,
-            system_prompt="Du bist Manuel. Beantworte ausschlieÇYlich Fragen zu meinem Bericht anhand der bereitgestellten Quellen. Keine Bestellungen oder Reklamationen.",
+            system_prompt=("Du bist Manuel. Beantworte ausschliesslich Fragen zu meinem Bericht anhand der bereitgestellten Quellen. Erlaube auch Meta-Fragen wie Zusammenfassung, wichtigste Punkte, Staerken und Schwaechen. Antworte immer ausgewogen und konstruktiv: Hebe mindestens einen positiven Aspekt hervor und formuliere Kritik sachlich/ausgewogen. Niemals nur Negatives berichten. Keine Bestellungen oder Reklamationen."),
             query_expand=False,
             product_store=None,
             lang_helper=core.lang_helper,
