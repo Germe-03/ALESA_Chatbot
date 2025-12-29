@@ -28,9 +28,9 @@ class AppController:
     def __init__(
         self,
         qa_service: QAService,
-        manual_qa_service: QAService | None = None,
         order_flow: OrderFlow,
         pre_order_gate: PreOrderGate,
+        manual_qa_service: QAService | None = None,
         system_banner: str = "",
         orders_repo: OrderRepo | None = None,
         order_service: OrderService | None = None,
@@ -78,14 +78,15 @@ class AppController:
         q = (user_text or "").strip()
         low = q.lower()
 
-        # Manuel-Modus aktivieren: nur wenn Feature vorhanden und Trigger exakt "manuel"
-        if not self.manual_mode and self.manual_qa_service is not None and low == "manuel":
+        # Manuel-Modus per Session-Kennzeichnung erzwingen
+        if session_id and "manuel-" in session_id.lower():
             self.manual_mode = True
-            responses.append("Du bist jetzt im Manuel-Modus. Ich beantworte nur Fragen zu deinem Bericht. Keine Bestellungen oder Reklamationen, keine Logs.")
-            return responses
 
         # Im Manuel-Modus alles andere Ç¬berspringen, nur dediziertes QA
-        if self.manual_mode and self.manual_qa_service is not None:
+        if self.manual_mode:
+            if self.manual_qa_service is None:
+                responses.append("Manuel-Modus ist aktiv, aber der Bericht-Retriever fehlt. Bitte Bericht unter data/reports/manuel/ ablegen und Server neu starten.")
+                return responses
             if not q:
                 return []
             try:

@@ -65,6 +65,9 @@ uvicorn src.alesa_bot.web_api:app --host 127.0.0.1 --port 8080
 Öffne anschließend `http://127.0.0.1:8080/`.
 Öffne anschliessend `http://127.0.0.1:8080/admin`
 
+Öffne anschliessend `http://127.0.0.1:8080/manuel`
+wenn man fragen zu dem Bericht hat
+
 CLI‑Variante (optional):
 
 ```

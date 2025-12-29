@@ -12,10 +12,17 @@ except Exception:  # optional
 
 class FileIndexer:
     """Kleiner In-Memory-Index: {pfad: [(seite|None, text), ...]}"""
-    def __init__(self, roots: List[Path], max_mb: int = 15, max_pdf_pages: int = 15) -> None:
+    def __init__(
+        self,
+        roots: List[Path],
+        max_mb: int = 15,
+        max_pdf_pages: int = 15,
+        exclude_prefixes: List[Path] | None = None,
+    ) -> None:
         self.roots = roots
         self.max_mb = max_mb
         self.max_pdf_pages = max_pdf_pages
+        self.exclude_prefixes = [p.resolve() for p in (exclude_prefixes or [])]
         self._index: Dict[str, List[Tuple[int | None, str]]] = {}
 
     def build(self) -> None:
@@ -23,6 +30,9 @@ class FileIndexer:
         for path in iter_files(self.roots):
             try:
                 if path.stat().st_size > self.max_mb * 1024 * 1024:
+                    continue
+                abs_path = path.resolve()
+                if any(abs_path.is_relative_to(excl) for excl in self.exclude_prefixes):
                     continue
             except Exception:
                 continue
@@ -54,5 +64,4 @@ class FileIndexer:
     @property
     def data(self) -> Dict[str, List[Tuple[int | None, str]]]:
         return self._index
-
 

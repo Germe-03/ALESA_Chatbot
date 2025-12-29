@@ -195,24 +195,30 @@ def admin_ml(
 @app.post("/chat")
 def chat(session: str = Form(None), message: str = Form(...)):
     sid_raw = session or uuid.uuid4().hex
+    manual_session = (sid_raw or "").lower().startswith("manuel-")
     # Prefix mit SERVER_SEED erzwingt neue Chat-ID pro Server-Start, auch wenn der Client die gleiche Basis-ID sendet
     sid = f"{SERVER_SEED}-{sid_raw}"
     ctrl = _get_controller(sid)
-    manual_flag = (message or "").strip().lower() == "manuel" or sid in MANUAL_SESSIONS
     try:
-        # log user message
-        if not manual_flag:
+        # Manuel-Modus erzwingen, wenn Session als Manuel gekennzeichnet ist
+        if manual_session:
             try:
-                core.logger.log_interaction(sid, role="user", message=message)
+                setattr(ctrl, "manual_mode", True)
             except Exception:
                 pass
         replies = ctrl.handle(message, session_id=sid)
         # Falls der Controller den Manuel-Modus aktiviert hat, Session merken
         if getattr(ctrl, "manual_mode", False):
-            manual_flag = True
             MANUAL_SESSIONS.add(sid)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat error: {e}")
+    manual_flag = manual_session or (sid in MANUAL_SESSIONS) or (message or "").strip().lower() == "manuel"
+    # log user message (nur wenn nicht Manuel-Modus)
+    if not manual_flag:
+        try:
+            core.logger.log_interaction(sid, role="user", message=message)
+        except Exception:
+            pass
     # log bot replies with optional sources from QA
     if not manual_flag:
         try:

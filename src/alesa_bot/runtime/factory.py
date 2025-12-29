@@ -42,10 +42,12 @@ class CoreContext:
 
 
 def _build_index_and_tables(cfg) -> tuple[FileIndexer, ProductTableStore]:
+    manual_root = cfg.paths.data_root / "reports" / "manuel"
     indexer = FileIndexer(
         roots=[cfg.paths.data_processed_raw, cfg.paths.data_processed, cfg.paths.data_root],
         max_mb=cfg.retrieval.max_mb,
         max_pdf_pages=cfg.retrieval.max_pdf_pages,
+        exclude_prefixes=[manual_root],
     )
     indexer.build()
 
@@ -81,6 +83,7 @@ def _build_retriever(cfg, indexer) -> tuple[EmbeddingEncoder, any]:
         project=cfg.vertex.project,
         location=cfg.vertex.embed_location,
     )
+    manual_root = (cfg.paths.data_root / "reports" / "manuel").resolve()
     try:
         store = ChromaStore(cfg=VSConfig(root=cfg.paths.data_root / "vectorstore"), encoder=encoder)
         store.build(indexer, size=800, overlap=200)
@@ -99,7 +102,25 @@ def _build_retriever(cfg, indexer) -> tuple[EmbeddingEncoder, any]:
             overlap=200,
         )
 
-    retriever = BoostedRetriever(indexer=indexer, base=base, time_limit_sec=cfg.retrieval.time_limit_sec)
+    class _ExcludeManual:
+        def __init__(self, wrapped, root: Path):
+            self.wrapped = wrapped
+            self.root = root
+        def search(self, query: str, top_k: int = 6):
+            hits = self.wrapped.search(query, top_k=top_k)
+            filtered = []
+            for h in hits:
+                try:
+                    hp = Path(h.path).resolve()
+                    if not hp.is_relative_to(self.root):
+                        filtered.append(h)
+                except Exception:
+                    continue
+            return filtered
+
+    base_filtered = _ExcludeManual(base, manual_root)
+
+    retriever = BoostedRetriever(indexer=indexer, base=base_filtered, time_limit_sec=cfg.retrieval.time_limit_sec)
     return encoder, retriever
 
 
@@ -140,6 +161,33 @@ def _build_manual_retriever(cfg, encoder) -> any | None:
     return BoostedRetriever(indexer=indexer, base=base, time_limit_sec=cfg.retrieval.time_limit_sec)
 
 
+def _build_manual_retriever_scoped(cfg, encoder) -> any | None:
+    """Wrapper um den Manuel-Retriever, der Treffer strikt auf data/reports/manuel begrenzt."""
+    base = _build_manual_retriever(cfg, encoder)
+    if base is None:
+        return None
+    manual_root = (cfg.paths.data_root / "reports" / "manuel").resolve()
+
+    class _Scoped:
+        def __init__(self, wrapped, root: Path):
+            self.wrapped = wrapped
+            self.root = root
+
+        def search(self, query: str, top_k: int = 6):
+            hits = self.wrapped.search(query, top_k=top_k)
+            filtered = []
+            for h in hits:
+                try:
+                    hp = Path(h.path).resolve()
+                    if hp.is_relative_to(self.root):
+                        filtered.append(h)
+                except Exception:
+                    continue
+            return filtered
+
+    return _Scoped(base, manual_root)
+
+
 def _build_llm(cfg) -> VertexLLM:
     return VertexLLM(
         project=cfg.vertex.project,
@@ -153,7 +201,7 @@ def build_core() -> CoreContext:
     cfg = load_config()
     indexer, prod_store = _build_index_and_tables(cfg)
     encoder, retriever = _build_retriever(cfg, indexer)
-    manual_retriever = _build_manual_retriever(cfg, encoder)
+    manual_retriever = _build_manual_retriever_scoped(cfg, encoder)
     llm = _build_llm(cfg)
     lang_helper = LanguageHelper(llm)
     orders_repo = OrderRepo(root=cfg.paths.data_root / "orders")
